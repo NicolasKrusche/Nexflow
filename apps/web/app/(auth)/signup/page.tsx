@@ -27,7 +27,13 @@ export default function SignupPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      setDone(true);
+      // If email confirmation is off, sign in directly
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      if (!signInError) {
+        window.location.href = "/dashboard";
+      } else {
+        setDone(true);
+      }
     }
   }
 
