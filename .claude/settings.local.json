@@ -20,7 +20,19 @@
       "Bash(taskkill //F //PID 50812 //PID 6396 //PID 64040)",
       "Bash(ls \"H:/Archon/ARCHON/apps/web/\"*.env*)",
       "Bash(ls \"H:/Archon/ARCHON/apps/web/.env\"*)",
-      "Bash(xxd \"H:/Archon/ARCHON/apps/web/.env.local\")"
+      "Bash(xxd \"H:/Archon/ARCHON/apps/web/.env.local\")",
+      "Bash(supabase start:*)",
+      "Bash(where supabase:*)",
+      "Bash(npx supabase:*)",
+      "Bash(npm i:*)",
+      "Bash(winget --version)",
+      "Bash(scoop --version)",
+      "Bash(winget install:*)",
+      "Bash(docker info:*)",
+      "Bash(cmd.exe /c \"docker info 2>&1\")",
+      "Bash(cmd.exe /c \"docker info\")",
+      "Bash(powershell.exe -Command \"docker info 2>&1 | Select-Object -First 10\")",
+      "Bash(pnpm --filter @flowos/web add openai)"
     ]
   }
 }

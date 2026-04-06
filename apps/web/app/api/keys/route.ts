@@ -6,7 +6,7 @@ import { vaultStore } from "@/lib/vault";
 
 const CreateKeySchema = z.object({
   name: z.string().min(1).max(100),
-  provider: z.enum(["anthropic", "openai", "google", "mistral", "cohere", "groq"]),
+  provider: z.string().min(1).max(50),
   key: z.string().min(10),
 });
 

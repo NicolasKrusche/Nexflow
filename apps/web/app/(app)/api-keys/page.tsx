@@ -21,17 +21,19 @@ type ApiKey = {
 const PROVIDERS = [
   { value: "anthropic", label: "Anthropic" },
   { value: "openai", label: "OpenAI" },
+  { value: "openrouter", label: "OpenRouter" },
   { value: "google", label: "Google (Gemini)" },
   { value: "mistral", label: "Mistral" },
   { value: "cohere", label: "Cohere" },
   { value: "groq", label: "Groq" },
+  { value: "other", label: "Other" },
 ] as const;
 
 export default function ApiKeysPage() {
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", provider: "anthropic", key: "" });
+  const [form, setForm] = useState({ name: "", provider: "anthropic", customProvider: "", key: "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [validating, setValidating] = useState<string | null>(null);
@@ -50,14 +52,15 @@ export default function ApiKeysPage() {
     e.preventDefault();
     setSaving(true);
     setError(null);
+    const provider = form.provider === "other" ? form.customProvider.trim().toLowerCase() : form.provider;
     const res = await fetch("/api/keys", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ name: form.name, provider, key: form.key }),
     });
     if (res.ok) {
       setDialogOpen(false);
-      setForm({ name: "", provider: "anthropic", key: "" });
+      setForm({ name: "", provider: "anthropic", customProvider: "", key: "" });
       load();
     } else {
       const data = await res.json();
@@ -161,12 +164,21 @@ export default function ApiKeysPage() {
                   id="provider"
                   className="mt-1"
                   value={form.provider}
-                  onChange={(e) => setForm((f) => ({ ...f, provider: e.target.value }))}
+                  onChange={(e) => setForm((f) => ({ ...f, provider: e.target.value, customProvider: "" }))}
                 >
                   {PROVIDERS.map((p) => (
                     <option key={p.value} value={p.value}>{p.label}</option>
                   ))}
                 </Select>
+                {form.provider === "other" && (
+                  <Input
+                    className="mt-2"
+                    placeholder="Provider name (e.g. together-ai)"
+                    required
+                    value={form.customProvider}
+                    onChange={(e) => setForm((f) => ({ ...f, customProvider: e.target.value }))}
+                  />
+                )}
               </div>
               <div>
                 <Label htmlFor="name">Label</Label>

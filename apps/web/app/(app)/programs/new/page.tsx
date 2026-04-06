@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import type { ValidationResult } from "@/lib/validation";
@@ -22,7 +24,14 @@ type GenesisError = {
   missing?: string[];
 };
 
-type Step = "describe" | "connections" | "generating" | "result";
+type ApiKey = {
+  id: string;
+  name: string;
+  provider: string;
+  is_valid: boolean;
+};
+
+type Step = "describe" | "connections" | "model" | "generating" | "result";
 
 const PROVIDER_LABELS: Record<string, string> = {
   gmail: "Gmail",
@@ -41,6 +50,10 @@ export default function NewProgramPage() {
   const [loadingConnections, setLoadingConnections] = useState(true);
   const [genesisError, setGenesisError] = useState<GenesisError | null>(null);
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+  const [loadingKeys, setLoadingKeys] = useState(false);
+  const [selectedKeyId, setSelectedKeyId] = useState<string | null>(null);
+  const [model, setModel] = useState("");
   const [programId, setProgramId] = useState<string | null>(null);
   const [programName, setProgramName] = useState<string>("");
 
@@ -53,6 +66,30 @@ export default function NewProgramPage() {
       })
       .catch(() => setLoadingConnections(false));
   }, []);
+
+  const DEFAULT_MODELS: Record<string, string> = {
+    anthropic: "claude-opus-4-6",
+    openai: "gpt-4o",
+    google: "gemini-1.5-pro",
+    groq: "llama-3.1-70b-versatile",
+    mistral: "mistral-large-latest",
+    openrouter: "anthropic/claude-opus-4-6",
+  };
+
+  async function loadApiKeys() {
+    setLoadingKeys(true);
+    const res = await fetch("/api/keys");
+    if (res.ok) {
+      const data: ApiKey[] = await res.json();
+      const valid = data.filter((k) => k.is_valid);
+      setApiKeys(valid);
+      if (valid.length > 0) {
+        setSelectedKeyId(valid[0].id);
+        setModel(DEFAULT_MODELS[valid[0].provider] ?? "");
+      }
+    }
+    setLoadingKeys(false);
+  }
 
   function toggleConnection(id: string) {
     setSelectedIds((prev) => {
@@ -72,6 +109,7 @@ export default function NewProgramPage() {
       body: JSON.stringify({
         description,
         connection_ids: [...selectedIds],
+        api_key_id: selectedKeyId,
       }),
     });
 
@@ -185,7 +223,67 @@ export default function NewProgramPage() {
             <Button variant="outline" onClick={() => setStep("describe")}>
               ← Back
             </Button>
-            <Button onClick={handleGenerate}>
+            <Button onClick={() => { loadApiKeys(); setStep("model"); }}>
+              Continue →
+            </Button>
+          </div>
+        </>
+      )}
+
+      {/* Step: Select model / API key */}
+      {step === "model" && (
+        <>
+          <div>
+            <h1 className="text-xl font-semibold">Choose a model</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Select which API key to use for generating this program.
+            </p>
+          </div>
+
+          {loadingKeys ? (
+            <p className="text-sm text-muted-foreground">Loading keys…</p>
+          ) : apiKeys.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  No API keys yet. Add one to generate programs.
+                </p>
+                <Button variant="outline" size="sm" onClick={() => router.push("/api-keys")}>
+                  Add API key
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-2">
+              {apiKeys.map((k) => (
+                <button
+                  key={k.id}
+                  onClick={() => setSelectedKeyId(k.id)}
+                  className={`w-full flex items-center justify-between rounded-lg border px-4 py-3 text-left transition-colors ${
+                    selectedKeyId === k.id
+                      ? "border-ring bg-accent"
+                      : "border-border hover:bg-accent/50"
+                  }`}
+                >
+                  <div>
+                    <p className="text-sm font-medium">{k.name}</p>
+                    <p className="text-xs text-muted-foreground capitalize">{k.provider}</p>
+                  </div>
+                  <div
+                    className={`w-4 h-4 rounded-full border-2 transition-colors ${
+                      selectedKeyId === k.id ? "border-ring bg-ring" : "border-muted-foreground"
+                    }`}
+                  />
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => setStep("connections")}>
+              ← Back
+            </Button>
+            <Button disabled={!selectedKeyId} onClick={handleGenerate}>
               Generate program
             </Button>
           </div>

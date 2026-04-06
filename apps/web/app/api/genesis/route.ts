@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import { createServerClient } from "@/lib/supabase/server";
-import { apiError } from "@/lib/api";
+import { apiError, createServiceClient } from "@/lib/api";
+import { vaultRetrieve } from "@/lib/vault";
 import { GENESIS_SYSTEM_PROMPT, buildGenesisUserMessage } from "@/lib/genesis/prompt";
 import { ProgramSchemaZ } from "@flowos/schema";
 import { validatePostGenesis } from "@/lib/validation";
@@ -10,6 +11,7 @@ import { validatePostGenesis } from "@/lib/validation";
 const RequestSchema = z.object({
   description: z.string().min(10).max(2000),
   connection_ids: z.array(z.string().uuid()).max(10),
+  api_key_id: z.string().uuid(),
 });
 
 // POST /api/genesis — generate a program schema from a description
@@ -22,7 +24,7 @@ export async function POST(request: Request) {
   const parsed = RequestSchema.safeParse(body);
   if (!parsed.success) return apiError(parsed.error.message, 400);
 
-  const { description, connection_ids } = parsed.data;
+  const { description, connection_ids, api_key_id } = parsed.data;
 
   // Resolve the selected connections
   const { data: connections, error: connError } = await supabase
@@ -39,10 +41,31 @@ export async function POST(request: Request) {
     scopes: c.scopes ?? [],
   }));
 
-  // Call Claude
-  console.log("[genesis] ANTHROPIC_API_KEY present:", !!process.env.ANTHROPIC_API_KEY, "length:", process.env.ANTHROPIC_API_KEY?.length ?? 0);
+  // Fetch the selected API key from Vault
+  const serviceClient = createServiceClient();
+  const { data: apiKeyRow, error: keysError } = await serviceClient
+    .from("api_keys")
+    .select("vault_secret_id, provider")
+    .eq("id", api_key_id)
+    .eq("user_id", user.id)
+    .single();
+
+  if (keysError || !apiKeyRow) {
+    return apiError("API key not found. Please select a valid key.", 402);
+  }
+
+  let anthropicApiKey: string;
+  try {
+    anthropicApiKey = await vaultRetrieve(serviceClient, apiKeyRow.vault_secret_id);
+  } catch (err) {
+    return apiError(`Failed to retrieve API key: ${(err as Error).message}`, 500);
+  }
+
+  // Call Claude (supports OpenRouter and other OpenAI-compatible providers)
+  const isOpenRouter = apiKeyRow.provider === "openrouter";
   const anthropic = new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY!,
+    apiKey: anthropicApiKey,
+    ...(isOpenRouter && { baseURL: "https://openrouter.ai/api/v1" }),
   });
 
   let rawText: string;
