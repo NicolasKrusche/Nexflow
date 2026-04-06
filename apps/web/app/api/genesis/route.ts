@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { createServerClient } from "@/lib/supabase/server";
 import { apiError, createServiceClient } from "@/lib/api";
 import { vaultRetrieve } from "@/lib/vault";
@@ -12,6 +13,7 @@ const RequestSchema = z.object({
   description: z.string().min(10).max(2000),
   connection_ids: z.array(z.string().uuid()).max(10),
   api_key_id: z.string().uuid(),
+  model: z.string().min(1),
 });
 
 // POST /api/genesis — generate a program schema from a description
@@ -24,7 +26,7 @@ export async function POST(request: Request) {
   const parsed = RequestSchema.safeParse(body);
   if (!parsed.success) return apiError(parsed.error.message, 400);
 
-  const { description, connection_ids, api_key_id } = parsed.data;
+  const { description, connection_ids, api_key_id, model } = parsed.data;
 
   // Resolve the selected connections
   const { data: connections, error: connError } = await supabase
@@ -61,27 +63,42 @@ export async function POST(request: Request) {
     return apiError(`Failed to retrieve API key: ${(err as Error).message}`, 500);
   }
 
-  // Call Claude (supports OpenRouter and other OpenAI-compatible providers)
-  const isOpenRouter = apiKeyRow.provider === "openrouter";
-  const anthropic = new Anthropic({
-    apiKey: anthropicApiKey,
-    ...(isOpenRouter && { baseURL: "https://openrouter.ai/api/v1" }),
-  });
+  // Call the model — use OpenAI-compatible SDK for OpenRouter/OpenAI/etc, Anthropic SDK for Anthropic
+  const useAnthropicSDK = apiKeyRow.provider === "anthropic";
 
   let rawText: string;
   try {
-    const msg = await anthropic.messages.create({
-      model: "claude-opus-4-6",
-      max_tokens: 4096,
-      system: GENESIS_SYSTEM_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content: buildGenesisUserMessage(description, availableConnections),
-        },
-      ],
-    });
-    rawText = msg.content[0].type === "text" ? msg.content[0].text : "";
+    if (useAnthropicSDK) {
+      const anthropic = new Anthropic({ apiKey: anthropicApiKey });
+      const msg = await anthropic.messages.create({
+        model,
+        max_tokens: 4096,
+        system: GENESIS_SYSTEM_PROMPT,
+        messages: [{ role: "user", content: buildGenesisUserMessage(description, availableConnections) }],
+      });
+      rawText = msg.content[0].type === "text" ? msg.content[0].text : "";
+    } else {
+      const baseURL = apiKeyRow.provider === "openrouter"
+        ? "https://openrouter.ai/api/v1"
+        : apiKeyRow.provider === "openai"
+          ? "https://api.openai.com/v1"
+          : apiKeyRow.provider === "groq"
+            ? "https://api.groq.com/openai/v1"
+            : apiKeyRow.provider === "mistral"
+              ? "https://api.mistral.ai/v1"
+              : undefined;
+
+      const openai = new OpenAI({ apiKey: anthropicApiKey, ...(baseURL && { baseURL }) });
+      const msg = await openai.chat.completions.create({
+        model,
+        max_tokens: 4096,
+        messages: [
+          { role: "system", content: GENESIS_SYSTEM_PROMPT },
+          { role: "user", content: buildGenesisUserMessage(description, availableConnections) },
+        ],
+      });
+      rawText = msg.choices[0]?.message?.content ?? "";
+    }
   } catch (err) {
     return apiError(`Genesis model call failed: ${(err as Error).message}`, 502);
   }

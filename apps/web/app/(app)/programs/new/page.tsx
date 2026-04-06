@@ -73,7 +73,7 @@ export default function NewProgramPage() {
     google: "gemini-1.5-pro",
     groq: "llama-3.1-70b-versatile",
     mistral: "mistral-large-latest",
-    openrouter: "anthropic/claude-opus-4-6",
+    openrouter: "qwen/qwen3.6-plus:free",
   };
 
   async function loadApiKeys() {
@@ -110,6 +110,7 @@ export default function NewProgramPage() {
         description,
         connection_ids: [...selectedIds],
         api_key_id: selectedKeyId,
+        model: model.trim(),
       }),
     });
 
@@ -258,7 +259,7 @@ export default function NewProgramPage() {
               {apiKeys.map((k) => (
                 <button
                   key={k.id}
-                  onClick={() => setSelectedKeyId(k.id)}
+                  onClick={() => { setSelectedKeyId(k.id); setModel(DEFAULT_MODELS[k.provider] ?? ""); }}
                   className={`w-full flex items-center justify-between rounded-lg border px-4 py-3 text-left transition-colors ${
                     selectedKeyId === k.id
                       ? "border-ring bg-accent"
@@ -276,6 +277,21 @@ export default function NewProgramPage() {
                   />
                 </button>
               ))}
+              {selectedKeyId && (
+                <div className="pt-2">
+                  <Label htmlFor="model">Model</Label>
+                  <Input
+                    id="model"
+                    className="mt-1"
+                    placeholder="e.g. claude-opus-4-6 or anthropic/claude-opus-4-6"
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    For OpenRouter use format: <span className="font-mono">anthropic/claude-opus-4-6</span>
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
@@ -283,7 +299,7 @@ export default function NewProgramPage() {
             <Button variant="outline" onClick={() => setStep("connections")}>
               ← Back
             </Button>
-            <Button disabled={!selectedKeyId} onClick={handleGenerate}>
+            <Button disabled={!selectedKeyId || !model.trim()} onClick={handleGenerate}>
               Generate program
             </Button>
           </div>
