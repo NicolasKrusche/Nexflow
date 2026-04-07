@@ -103,11 +103,19 @@ export async function POST(request: Request) {
     return apiError(`Genesis model call failed: ${(err as Error).message}`, 502);
   }
 
+  // Strip markdown code fences if the model wrapped the JSON (common with non-Anthropic models)
+  const cleanedText = rawText
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+
   // Parse and validate the response
   let parsed_schema: unknown;
   try {
-    parsed_schema = JSON.parse(rawText.trim());
+    parsed_schema = JSON.parse(cleanedText);
   } catch {
+    console.error("[genesis] Failed to parse JSON. Raw output:", rawText.slice(0, 1000));
     return apiError("Genesis model returned invalid JSON", 502);
   }
 
@@ -130,8 +138,13 @@ export async function POST(request: Request) {
     (parsed_schema as Record<string, unknown>).program_id = crypto.randomUUID();
   }
 
+  // Normalize common model deviations before strict Zod validation
+  normalizeSchema(parsed_schema);
+
   const schemaResult = ProgramSchemaZ.safeParse(parsed_schema);
   if (!schemaResult.success) {
+    console.error("[genesis] Schema validation failed:", JSON.stringify(schemaResult.error.flatten(), null, 2));
+    console.error("[genesis] Raw model output:", rawText.slice(0, 2000));
     return NextResponse.json(
       {
         error: "SCHEMA_VALIDATION_FAILED",
@@ -178,4 +191,160 @@ export async function POST(request: Request) {
   });
 
   return NextResponse.json({ program, schema, validation }, { status: 201 });
+}
+
+// ─── Schema normalization ──────────────────────────────────────────────────
+// Fixes known deviations that non-Anthropic models commonly produce, so that
+// the strict Zod validator doesn't reject otherwise-valid schemas.
+
+const TRIGGER_TYPE_MAP: Record<string, string> = {
+  schedule: "cron",
+  scheduled: "cron",
+  cron_job: "cron",
+  cronjob: "cron",
+  timer: "cron",
+  time: "cron",
+  interval: "cron",
+  http: "webhook",
+  http_webhook: "webhook",
+  incoming_webhook: "webhook",
+};
+
+const DATA_TYPE_MAP: Record<string, string> = {
+  integer: "number",
+  int: "number",
+  float: "number",
+  double: "number",
+  long: "number",
+  decimal: "number",
+  dict: "object",
+  list: "array",
+};
+
+function normalizeDataSchema(schema: unknown): void {
+  if (!schema || typeof schema !== "object" || Array.isArray(schema)) return;
+  const s = schema as Record<string, unknown>;
+  if (typeof s.type === "string" && DATA_TYPE_MAP[s.type]) {
+    s.type = DATA_TYPE_MAP[s.type];
+  }
+  if (s.properties && typeof s.properties === "object") {
+    for (const v of Object.values(s.properties)) normalizeDataSchema(v);
+  }
+  if (s.items) normalizeDataSchema(s.items);
+}
+
+function normalizeSchema(raw: unknown): void {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return;
+  const schema = raw as Record<string, unknown>;
+
+  // Normalize nodes
+  if (Array.isArray(schema.nodes)) {
+    for (const node of schema.nodes) {
+      if (!node || typeof node !== "object") continue;
+      const n = node as Record<string, unknown>;
+
+      // Fix trigger config — models often omit trigger_type or use wrong field names
+      if (n.type === "trigger" && n.config && typeof n.config === "object") {
+        const cfg = n.config as Record<string, unknown>;
+
+        // Normalize known trigger_type aliases
+        if (typeof cfg.trigger_type === "string" && TRIGGER_TYPE_MAP[cfg.trigger_type]) {
+          cfg.trigger_type = TRIGGER_TYPE_MAP[cfg.trigger_type];
+        }
+
+        // Infer trigger_type from fields if missing or still wrong
+        const validTriggerTypes = new Set(["cron", "event", "webhook", "manual", "program_output"]);
+        if (!cfg.trigger_type || !validTriggerTypes.has(cfg.trigger_type as string)) {
+          if (cfg.schedule || cfg.expression || cfg.cron || cfg.cron_expression) {
+            cfg.trigger_type = "cron";
+          } else if (cfg.endpoint_id || cfg.url || cfg.path || cfg.webhook_url) {
+            cfg.trigger_type = "webhook";
+          } else if (cfg.source && cfg.event) {
+            cfg.trigger_type = "event";
+          } else if (cfg.source_program_id) {
+            cfg.trigger_type = "program_output";
+          } else {
+            cfg.trigger_type = "manual";
+          }
+        }
+
+        // Normalize cron field names and fill required fields
+        if (cfg.trigger_type === "cron") {
+          if (!cfg.expression) {
+            cfg.expression = cfg.cron_expression ?? cfg.schedule ?? cfg.cron ?? "0 8 * * *";
+          }
+          delete cfg.schedule;
+          delete cfg.cron;
+          delete cfg.cron_expression;
+          if (!cfg.timezone) cfg.timezone = "UTC";
+        }
+
+        // Normalize webhook required fields
+        if (cfg.trigger_type === "webhook") {
+          if (!cfg.endpoint_id) cfg.endpoint_id = crypto.randomUUID();
+          if (!cfg.method) cfg.method = "POST";
+        }
+
+        // Normalize event required fields
+        if (cfg.trigger_type === "event") {
+          if (!cfg.source) cfg.source = "unknown";
+          if (!cfg.event) cfg.event = "trigger";
+          if (!("filter" in cfg)) cfg.filter = null;
+        }
+
+        // Normalize program_output required fields
+        if (cfg.trigger_type === "program_output") {
+          if (!cfg.source_program_id) cfg.source_program_id = "__USER_ASSIGNED__";
+          if (!Array.isArray(cfg.on_status)) cfg.on_status = ["success"];
+        }
+      }
+
+      // Fix DataSchema type fields on agent nodes
+      if (n.type === "agent" && n.config && typeof n.config === "object") {
+        const cfg = n.config as Record<string, unknown>;
+        normalizeDataSchema(cfg.input_schema);
+        normalizeDataSchema(cfg.output_schema);
+      }
+
+      // Fix DataSchema on step nodes
+      if (n.type === "step" && n.config && typeof n.config === "object") {
+        const cfg = n.config as Record<string, unknown>;
+        normalizeDataSchema(cfg.input_schema);
+        normalizeDataSchema(cfg.output_schema);
+        normalizeDataSchema(cfg.pass_schema);
+      }
+
+      // Ensure status is always "idle"
+      if (!n.status) n.status = "idle";
+    }
+  }
+
+  // Normalize top-level triggers array — sync type with the corresponding node's trigger_type
+  if (Array.isArray(schema.triggers) && Array.isArray(schema.nodes)) {
+    for (const trigger of schema.triggers) {
+      if (!trigger || typeof trigger !== "object") continue;
+      const t = trigger as Record<string, unknown>;
+
+      // Try to sync from the node config first (most reliable after node normalization above)
+      const triggerNode = (schema.nodes as Record<string, unknown>[]).find(
+        (n) => n.id === t.node_id && n.type === "trigger"
+      );
+      if (triggerNode?.config && typeof triggerNode.config === "object") {
+        const nodeCfg = triggerNode.config as Record<string, unknown>;
+        if (nodeCfg.trigger_type) {
+          t.type = nodeCfg.trigger_type;
+        }
+      }
+
+      // Fallback: normalize aliases
+      if (typeof t.type === "string" && TRIGGER_TYPE_MAP[t.type]) {
+        t.type = TRIGGER_TYPE_MAP[t.type];
+      }
+
+      // Ensure required fields exist
+      if (!("is_active" in t)) t.is_active = true;
+      if (!("last_fired" in t)) t.last_fired = null;
+      if (!("next_scheduled" in t)) t.next_scheduled = null;
+    }
+  }
 }

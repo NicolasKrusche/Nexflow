@@ -32,7 +32,9 @@
       "Bash(cmd.exe /c \"docker info 2>&1\")",
       "Bash(cmd.exe /c \"docker info\")",
       "Bash(powershell.exe -Command \"docker info 2>&1 | Select-Object -First 10\")",
-      "Bash(pnpm --filter @flowos/web add openai)"
+      "Bash(pnpm --filter @flowos/web add openai)",
+      "Bash(taskkill //F //IM node.exe)",
+      "Bash(pnpm add:*)"
     ]
   }
 }

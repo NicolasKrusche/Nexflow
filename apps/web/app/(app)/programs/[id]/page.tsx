@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { RunPanel } from "./run-panel";
 import type { Json } from "@flowos/db";
 
 type SchemaNode = { id: string; label: string; description: string; type: string };
@@ -108,6 +109,9 @@ export default async function ProgramPage({ params }: { params: { id: string } }
           )}
         </CardContent>
       </Card>
+
+      {/* Run panel */}
+      <RunPanel programId={program.id} />
 
       {/* Raw schema */}
       <details>

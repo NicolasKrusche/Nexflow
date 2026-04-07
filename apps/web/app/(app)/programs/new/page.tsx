@@ -19,9 +19,10 @@ type Connection = {
 };
 
 type GenesisError = {
-  error: "INSUFFICIENT_DESCRIPTION" | "MISSING_CONNECTIONS" | "SCHEMA_VALIDATION_FAILED";
+  error: "INSUFFICIENT_DESCRIPTION" | "MISSING_CONNECTIONS" | "SCHEMA_VALIDATION_FAILED" | string;
   message?: string;
   missing?: string[];
+  details?: { fieldErrors: Record<string, string[]>; formErrors: string[] };
 };
 
 type ApiKey = {
@@ -337,6 +338,14 @@ export default function NewProgramPage() {
                 )}
                 {genesisError.missing && (
                   <p>Required: {genesisError.missing.join(", ")}</p>
+                )}
+                {genesisError.details && (
+                  <div className="mt-1 space-y-0.5 text-xs opacity-80">
+                    {genesisError.details.formErrors.map((e, i) => <p key={i}>{e}</p>)}
+                    {Object.entries(genesisError.details.fieldErrors).slice(0, 5).map(([field, errs]) => (
+                      <p key={field}><span className="font-mono">{field}</span>: {(errs as string[]).join(", ")}</p>
+                    ))}
+                  </div>
                 )}
               </div>
               <Button variant="outline" onClick={() => setStep("describe")}>
