@@ -50,7 +50,28 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001)",
       "Bash(pnpm test:*)",
       "Bash(npx kill-port:*)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)",
+      "Bash(cat \"H:/Archon/ARCHON_1/apps/web/app/\\(app\\)/programs/[id]/run-panel.tsx\")",
+      "Bash(ls \"H:/Archon/ARCHON_1/apps/web/app/\\(app\\)/\")",
+      "Bash(ls H:/Archon/ARCHON_1/apps/web/app/\\\\\\(app\\\\\\)/)",
+      "Bash(ls H:/Archon/ARCHON_1/apps/web/app/\\\\\\(app\\\\\\)/programs/[id]/)",
+      "Bash(ls H:/Archon/ARCHON_1/apps/web/app/api/programs/[id]/)",
+      "Bash(mkdir -p \"H:/Archon/ARCHON_1/apps/web/app/api/internal/vault/[ref]\")",
+      "Bash(mkdir -p \"H:/Archon/ARCHON_1/apps/web/app/api/runs/[id]\")",
+      "Bash(mkdir -p \"H:/Archon/ARCHON_1/apps/web/app/api/approvals/[id]\")",
+      "Bash(\"H:/Archon/ARCHON_1/apps/web/.env.local\")",
+      "Bash(find \"H:/Archon/ARCHON_1/apps/web/app/\\(app\\)/programs/[id]/runs\" -type f)",
+      "Bash(find \"H:/Archon/ARCHON_1/apps/web/app/\\(app\\)/approvals\" -type f)",
+      "Bash(curl -s http://localhost:8000/health)",
+      "Bash(poetry --version)",
+      "Bash(pip install:*)",
+      "Bash(poetry install:*)",
+      "Bash(python -m poetry --version)",
+      "Bash(python -m poetry install)",
+      "Bash(sed -i 's/from \\\\.db import/from db import/g; s/from \\\\.engine\\\\.executor import/from engine.executor import/g; s/from \\\\.schema import/from schema import/g' \"H:/Archon/ARCHON_1/apps/runtime/main.py\")",
+      "Bash(sed -i 's/from \\\\.\\\\.schema import/from schema import/g; s/from \\\\.\\\\.db import/from db import/g' \"H:/Archon/ARCHON_1/apps/runtime/engine/executor.py\")",
+      "Bash(git add:*)",
+      "Bash(git -C \"H:/Archon/ARCHON_1\" status --short)"
     ]
   }
 }

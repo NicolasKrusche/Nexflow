@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import type { PreFlightCheck } from "@/lib/validation/pre-flight";
 
@@ -37,7 +38,8 @@ function CheckIcon({ status }: { status: PreFlightCheck["status"] }) {
 }
 
 export function RunPanel({ programId }: { programId: string }) {
-  const [state, setState] = useState<"idle" | "checking" | "done">("idle");
+  const router = useRouter();
+  const [state, setState] = useState<"idle" | "checking" | "done" | "starting">("idle");
   const [preflight, setPreflight] = useState<PreFlightResult | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
@@ -65,6 +67,31 @@ export function RunPanel({ programId }: { programId: string }) {
     }
   }
 
+  async function startRun() {
+    setState("starting");
+    setFetchError(null);
+    try {
+      const res = await fetch("/api/runs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ program_id: programId }),
+      });
+      if (res.ok) {
+        const { run_id } = (await res.json()) as { run_id: string };
+        router.push(`/programs/${programId}/runs/${run_id}`);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setFetchError(
+          (err as { error?: string }).error ?? "Failed to start run"
+        );
+        setState("done");
+      }
+    } catch {
+      setFetchError("Network error — could not start run");
+      setState("done");
+    }
+  }
+
   const allPassed = preflight?.result.valid === true;
   const failCount = preflight?.checks.filter((c) => c.status === "fail").length ?? 0;
 
@@ -78,13 +105,17 @@ export function RunPanel({ programId }: { programId: string }) {
           </p>
         </div>
         <Button
-          onClick={runPreflight}
-          disabled={state === "checking"}
+          onClick={allPassed ? startRun : runPreflight}
+          disabled={state === "checking" || state === "starting"}
           className={allPassed ? "bg-green-600 hover:bg-green-700 text-white" : ""}
         >
           {state === "checking" ? (
             <span className="flex items-center gap-2">
               <Spinner /> Checking…
+            </span>
+          ) : state === "starting" ? (
+            <span className="flex items-center gap-2">
+              <Spinner /> Starting…
             </span>
           ) : state === "done" && allPassed ? (
             "Run ▶"
@@ -125,10 +156,7 @@ export function RunPanel({ programId }: { programId: string }) {
           {/* Summary */}
           {allPassed ? (
             <div className="rounded-md bg-green-500/10 border border-green-500/20 text-green-700 dark:text-green-400 px-3 py-2 text-xs mt-2">
-              All checks passed. Click Run to execute this program.
-              <span className="block text-[11px] opacity-70 mt-0.5">
-                Execution engine coming in Phase 3.
-              </span>
+              All checks passed. Click Run ▶ to execute this program.
             </div>
           ) : (
             <div className="rounded-md bg-destructive/10 border border-destructive/20 text-destructive px-3 py-2 text-xs mt-2">
