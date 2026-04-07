@@ -34,7 +34,10 @@
       "Bash(powershell.exe -Command \"docker info 2>&1 | Select-Object -First 10\")",
       "Bash(pnpm --filter @flowos/web add openai)",
       "Bash(taskkill //F //IM node.exe)",
-      "Bash(pnpm add:*)"
+      "Bash(pnpm add:*)",
+      "Bash(dir \"H:\\\\Archon\\\\ARCHON_1\\\\node_modules\\\\turbo\")",
+      "Bash(node -e \"console.log\\(require.resolve\\(''turbo''\\)\\)\")",
+      "Bash(node_modules/.pnpm/turbo@2.9.3/node_modules/turbo/bin/turbo --version)"
     ]
   }
 }

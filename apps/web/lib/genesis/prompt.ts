@@ -40,10 +40,25 @@ NODE RULES:
 - connection must be exactly one of the provided connection names, or null
 - position values must be spaced at least 300px apart horizontally, starting at x:100, y:200
 - Every graph must have exactly one trigger node
-- Agent nodes must include: model (always "__USER_ASSIGNED__"), api_key_ref (always "__USER_ASSIGNED__"), system_prompt (detailed and specific), input_schema, output_schema, requires_approval (boolean), approval_timeout_hours (default 24), scope_required (null or string), scope_access ("read"|"write"|"read_write"), retry (max_attempts:3, backoff:"exponential", backoff_base_seconds:5, fail_program_on_exhaust:false), tools (array of strings)
-- Step nodes must include: logic_type ("transform"|"filter"|"branch"), and type-specific fields. connection must be null
-- Connection nodes must include: scope_access, scope_required (array of strings)
 - Maximum 12 nodes for any single program
+
+TRIGGER NODE CONFIG (pick one shape based on user intent):
+- Cron:          { "trigger_type": "cron", "expression": "<cron string>", "timezone": "<tz string>" }
+- Event:         { "trigger_type": "event", "source": "<source>", "event": "<event name>", "filter": null }
+- Webhook:       { "trigger_type": "webhook", "endpoint_id": "<id>", "method": "POST" }
+- Manual:        { "trigger_type": "manual" }
+- Program output:{ "trigger_type": "program_output", "source_program_id": "<id>", "on_status": ["success"] }
+
+AGENT NODE CONFIG (all fields required):
+{ "model": "__USER_ASSIGNED__", "api_key_ref": "__USER_ASSIGNED__", "system_prompt": "<detailed>", "input_schema": <DataSchema|null>, "output_schema": <DataSchema|null>, "requires_approval": false, "approval_timeout_hours": 24, "scope_required": null, "scope_access": "read", "retry": { "max_attempts": 3, "backoff": "exponential", "backoff_base_seconds": 5, "fail_program_on_exhaust": false }, "tools": [] }
+
+STEP NODE CONFIG (pick one shape, connection must be null):
+- Transform: { "logic_type": "transform", "transformation": "<expr>", "input_schema": null, "output_schema": null }
+- Filter:    { "logic_type": "filter", "condition": "<expr>", "pass_schema": null }
+- Branch:    { "logic_type": "branch", "conditions": [{ "condition": "<expr>", "target_node_id": "<id>" }], "default_branch": "<node_id>" }
+
+CONNECTION NODE CONFIG:
+{ "scope_access": "read"|"write"|"read_write", "scope_required": ["<scope_string>"] }
 
 EDGE RULES:
 - Every edge must have: id (e.g. "e1"), from, to, type, data_mapping (null or object), condition (null or string), label (null or string)
