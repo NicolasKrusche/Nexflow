@@ -37,7 +37,17 @@
       "Bash(pnpm add:*)",
       "Bash(dir \"H:\\\\Archon\\\\ARCHON_1\\\\node_modules\\\\turbo\")",
       "Bash(node -e \"console.log\\(require.resolve\\(''turbo''\\)\\)\")",
-      "Bash(node_modules/.pnpm/turbo@2.9.3/node_modules/turbo/bin/turbo --version)"
+      "Bash(node_modules/.pnpm/turbo@2.9.3/node_modules/turbo/bin/turbo --version)",
+      "Bash(ls \"H:\\\\Archon\\\\ARCHON_1\\\\apps\\\\web\\\\app\\\\\\(app\\)\\\\programs\\\\[id]\")",
+      "Bash(ls \"H:\\\\Archon\\\\ARCHON_1\\\\apps\\\\web\\\\app\\\\\\(app\\)\")",
+      "Bash(rm \"H:\\\\Archon\\\\ARCHON_1\\\\apps\\\\web\\\\app\\\\\\(app\\)\\\\programs\\\\[id]\\\\editor\\\\layout.tsx\")",
+      "Bash(rm -rf \"H:\\\\Archon\\\\ARCHON_1\\\\apps\\\\web\\\\app\\\\\\(app\\)\\\\programs\\\\[id]\\\\editor\")",
+      "Bash(npx tsc:*)",
+      "Bash(find H:ArchonARCHON_1appsweb -newer H:ArchonARCHON_1appswebappglobals.css -name *.tsx -o -name *.ts)",
+      "Bash(ls \"H:/Archon/ARCHON_1/apps/web/app/\\(editor\\)/programs/\")",
+      "Bash(ls \"H:/Archon/ARCHON_1/apps/web/app/\\(editor\\)/programs/[id]/editor/\")",
+      "Bash(ls \"H:/Archon/ARCHON_1/apps/web/app/\\(editor\\)/\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001)"
     ]
   }
 }

@@ -65,6 +65,9 @@ export default async function ProgramPage({ params }: { params: { id: string } }
             {program.is_active ? "Active" : "Inactive"}
           </Badge>
           <Badge variant="outline" className="capitalize">{program.execution_mode}</Badge>
+          <Button asChild size="sm">
+            <Link href={`/programs/${program.id}/editor`}>Open Editor</Link>
+          </Button>
         </div>
       </div>
 
