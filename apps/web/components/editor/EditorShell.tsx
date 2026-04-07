@@ -32,6 +32,7 @@ import { DataFlowEdge } from "@/components/edges/DataFlowEdge";
 import { ControlFlowEdge } from "@/components/edges/ControlFlowEdge";
 import { EventEdge } from "@/components/edges/EventEdge";
 import { EditorToolbar } from "@/components/editor/EditorToolbar";
+import { VersionHistoryPanel } from "@/components/editor/VersionHistoryPanel";
 import { NodeSidebar } from "@/components/sidebars/NodeSidebar";
 import type { ApiKey } from "@/components/sidebars/NodeSidebar";
 
@@ -147,6 +148,14 @@ export function EditorShell({
     { ...initialEditorState(initialSchema), validationResult: initialValidation }
   );
 
+  // ── Version history panel visibility ─────────────────────────────────────
+
+  const [showHistory, setShowHistory] = React.useState(false);
+
+  // ── Clipboard for copy/paste ──────────────────────────────────────────────
+
+  const clipboardRef = useRef<SchemaNode | null>(null);
+
   // ── React Flow controlled state ───────────────────────────────────────────
   // We maintain separate RF node/edge state to pass into ReactFlow.
   // It is re-synced whenever state.schema changes.
@@ -253,6 +262,52 @@ export function EditorShell({
       if (meta && e.key === "z") {
         e.preventDefault();
         dispatch({ type: "UNDO" });
+        return;
+      }
+
+      // Copy: Cmd+C
+      if (meta && e.key === "c") {
+        if (state.selectedNodeId) {
+          const node = state.schema.nodes.find((n) => n.id === state.selectedNodeId);
+          if (node) clipboardRef.current = node;
+        }
+        return;
+      }
+
+      // Paste: Cmd+V
+      if (meta && e.key === "v") {
+        if (clipboardRef.current) {
+          const src = clipboardRef.current;
+          const newId = crypto.randomUUID();
+          const newNode: SchemaNode = {
+            ...src,
+            id: newId,
+            label: src.label + " (copy)",
+            position: { x: src.position.x + 40, y: src.position.y + 40 },
+            status: "idle",
+          } as SchemaNode;
+          dispatch({ type: "UPDATE_NODE", nodeId: newId, patch: newNode });
+          skipSyncRef.current = true;
+          setRfNodes((prev) => [
+            ...prev,
+            {
+              id: newId,
+              type: newNode.type,
+              position: newNode.position,
+              data: {
+                label: newNode.label,
+                description: newNode.description,
+                connection: newNode.connection,
+                status: newNode.status,
+                config: newNode.config,
+                validationState: "valid",
+                errors: [],
+                warnings: [],
+              },
+            },
+          ]);
+          dispatch({ type: "SELECT_NODE", nodeId: newId });
+        }
         return;
       }
 
@@ -503,8 +558,8 @@ export function EditorShell({
 
   // ── canUndo / canRedo ─────────────────────────────────────────────────────
 
-  const canUndo = state.historyIndex >= 0;
-  const canRedo = false; // See state.ts — redo is not implemented yet
+  const canUndo = state.past.length > 0;
+  const canRedo = state.future.length > 0;
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -526,6 +581,11 @@ export function EditorShell({
         onRun={handleRun}
         onBack={handleBack}
         onAddNode={handleAddNode}
+        onHistory={() => {
+          setShowHistory((prev) => !prev);
+          // Close node sidebar when opening history panel
+          if (!showHistory) dispatch({ type: "SELECT_NODE", nodeId: null });
+        }}
       />
 
       {/* Canvas area — below toolbar */}
@@ -575,14 +635,29 @@ export function EditorShell({
           />
         </ReactFlow>
 
-        {/* Node sidebar — slides in from right */}
-        {state.selectedNodeId && !isMobile && (
+        {/* Node sidebar — slides in from right (hidden when history panel is open) */}
+        {state.selectedNodeId && !isMobile && !showHistory && (
           <NodeSidebar
             nodeId={state.selectedNodeId}
             schema={state.schema}
             apiKeys={apiKeys}
             onUpdate={handleSidebarUpdate}
             onClose={() => dispatch({ type: "SELECT_NODE", nodeId: null })}
+          />
+        )}
+
+        {/* Version history panel — slides in from right */}
+        {showHistory && (
+          <VersionHistoryPanel
+            programId={programId}
+            currentVersion={state.schema.version_history.length > 0
+              ? Math.max(...state.schema.version_history.map((v) => v.version_number))
+              : 0}
+            onRollback={(schema) => {
+              dispatch({ type: "RESTORE_VERSION", schema });
+              setShowHistory(false);
+            }}
+            onClose={() => setShowHistory(false)}
           />
         )}
       </div>

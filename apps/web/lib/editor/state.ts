@@ -12,8 +12,10 @@ export interface EditorState {
   validationResult: ValidationResult | null;
   isDirty: boolean;
   isSaving: boolean;
-  history: ProgramSchema[]; // previous states (not including current)
-  historyIndex: number;     // index into history for redo support
+  /** States before current — pop to undo. */
+  past: ProgramSchema[];
+  /** States after current — pop to redo. Cleared on any new mutation. */
+  future: ProgramSchema[];
 }
 
 export type EditorAction =
@@ -33,23 +35,22 @@ export type EditorAction =
   | { type: "UNDO" }
   | { type: "REDO" }
   | { type: "SYNC_FROM_RF"; schema: ProgramSchema }
-  | { type: "UPDATE_NODE_CONFIG"; nodeId: string; config: Record<string, unknown> };
+  | { type: "UPDATE_NODE_CONFIG"; nodeId: string; config: Record<string, unknown> }
+  | { type: "RESTORE_VERSION"; schema: ProgramSchema };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Push the current schema onto the history stack and return the new stack.
- * Trims to MAX_HISTORY. When called after an undo, discards the "future".
+ * Push the current schema onto the past stack and clear the future stack.
+ * Any new mutation "forks" the timeline — future states are discarded.
+ * Trims past to MAX_HISTORY entries.
  */
-function pushHistory(
-  history: ProgramSchema[],
-  historyIndex: number,
+function pushPast(
+  past: ProgramSchema[],
   current: ProgramSchema
-): { history: ProgramSchema[]; historyIndex: number } {
-  // If we undid some steps, discard everything after historyIndex
-  const trimmed = history.slice(0, historyIndex + 1);
-  const next = [...trimmed, current].slice(-MAX_HISTORY);
-  return { history: next, historyIndex: next.length - 1 };
+): { past: ProgramSchema[]; future: ProgramSchema[] } {
+  const next = [...past, current].slice(-MAX_HISTORY);
+  return { past: next, future: [] };
 }
 
 // ─── Reducer ──────────────────────────────────────────────────────────────────
@@ -59,31 +60,28 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     // ── Node mutations ──────────────────────────────────────────────────────
 
     case "UPDATE_NODE": {
-      const { history, historyIndex } = pushHistory(
-        state.history,
-        state.historyIndex,
-        state.schema
-      );
+      const { past, future } = pushPast(state.past, state.schema);
       const nodes = state.schema.nodes.map((n) =>
         n.id === action.nodeId
           ? ({ ...n, ...action.patch } as ProgramSchema["nodes"][0])
           : n
       );
+      // If the node doesn't exist yet (paste / add case), append it
+      const exists = state.schema.nodes.some((n) => n.id === action.nodeId);
+      const finalNodes = exists
+        ? nodes
+        : [...state.schema.nodes, action.patch as ProgramSchema["nodes"][0]];
       return {
         ...state,
-        schema: { ...state.schema, nodes },
+        schema: { ...state.schema, nodes: finalNodes },
         isDirty: true,
-        history,
-        historyIndex,
+        past,
+        future,
       };
     }
 
     case "REMOVE_NODE": {
-      const { history, historyIndex } = pushHistory(
-        state.history,
-        state.historyIndex,
-        state.schema
-      );
+      const { past, future } = pushPast(state.past, state.schema);
       const nodes = state.schema.nodes.filter((n) => n.id !== action.nodeId);
       // Also remove any edges connected to the removed node
       const edges = state.schema.edges.filter(
@@ -95,19 +93,15 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         selectedNodeId:
           state.selectedNodeId === action.nodeId ? null : state.selectedNodeId,
         isDirty: true,
-        history,
-        historyIndex,
+        past,
+        future,
       };
     }
 
     // ── Edge mutations ──────────────────────────────────────────────────────
 
     case "ADD_EDGE": {
-      const { history, historyIndex } = pushHistory(
-        state.history,
-        state.historyIndex,
-        state.schema
-      );
+      const { past, future } = pushPast(state.past, state.schema);
       return {
         ...state,
         schema: {
@@ -115,17 +109,13 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
           edges: [...state.schema.edges, action.edge],
         },
         isDirty: true,
-        history,
-        historyIndex,
+        past,
+        future,
       };
     }
 
     case "REMOVE_EDGE": {
-      const { history, historyIndex } = pushHistory(
-        state.history,
-        state.historyIndex,
-        state.schema
-      );
+      const { past, future } = pushPast(state.past, state.schema);
       return {
         ...state,
         schema: {
@@ -135,8 +125,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         selectedEdgeId:
           state.selectedEdgeId === action.edgeId ? null : state.selectedEdgeId,
         isDirty: true,
-        history,
-        historyIndex,
+        past,
+        future,
       };
     }
 
@@ -187,13 +177,14 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     // ── Undo ────────────────────────────────────────────────────────────────
 
     case "UNDO": {
-      if (state.historyIndex < 0) return state;
-      const prevSchema = state.history[state.historyIndex];
-      if (!prevSchema) return state;
+      if (state.past.length === 0) return state;
+      const past = [...state.past];
+      const prevSchema = past.pop()!;
       return {
         ...state,
         schema: prevSchema,
-        historyIndex: state.historyIndex - 1,
+        past,
+        future: [state.schema, ...state.future],
         isDirty: true,
         selectedNodeId: null,
         selectedEdgeId: null,
@@ -203,39 +194,37 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     // ── Redo ────────────────────────────────────────────────────────────────
 
     case "REDO": {
-      // Redo is supported when historyIndex < history.length - 1
-      // The "current" state is beyond the end; but after undo we have future states
-      // We push state.schema onto history during UNDO if we want proper redo.
-      // For simplicity: history is a stack of past states; redo is not supported
-      // beyond what has been pushed. Return state unchanged if no redo available.
-      return state;
+      if (state.future.length === 0) return state;
+      const future = [...state.future];
+      const nextSchema = future.shift()!;
+      return {
+        ...state,
+        schema: nextSchema,
+        past: [...state.past, state.schema].slice(-MAX_HISTORY),
+        future,
+        isDirty: true,
+        selectedNodeId: null,
+        selectedEdgeId: null,
+      };
     }
 
     // ── Sync from React Flow (full schema replace after RF state diverges) ──
 
     case "SYNC_FROM_RF": {
-      const { history, historyIndex } = pushHistory(
-        state.history,
-        state.historyIndex,
-        state.schema
-      );
+      const { past, future } = pushPast(state.past, state.schema);
       return {
         ...state,
         schema: action.schema,
         isDirty: true,
-        history,
-        historyIndex,
+        past,
+        future,
       };
     }
 
     // ── Update node config (from sidebar) ───────────────────────────────────
 
     case "UPDATE_NODE_CONFIG": {
-      const { history, historyIndex } = pushHistory(
-        state.history,
-        state.historyIndex,
-        state.schema
-      );
+      const { past, future } = pushPast(state.past, state.schema);
       const nodes = state.schema.nodes.map((n) => {
         if (n.id !== action.nodeId) return n;
         return {
@@ -247,8 +236,23 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         ...state,
         schema: { ...state.schema, nodes },
         isDirty: true,
-        history,
-        historyIndex,
+        past,
+        future,
+      };
+    }
+
+    // ── Restore version (from version history panel) ─────────────────────────
+
+    case "RESTORE_VERSION": {
+      const { past, future } = pushPast(state.past, state.schema);
+      return {
+        ...state,
+        schema: action.schema,
+        isDirty: true,
+        past,
+        future,
+        selectedNodeId: null,
+        selectedEdgeId: null,
       };
     }
 
@@ -267,7 +271,7 @@ export function initialEditorState(schema: ProgramSchema): EditorState {
     validationResult: null,
     isDirty: false,
     isSaving: false,
-    history: [],
-    historyIndex: -1,
+    past: [],
+    future: [],
   };
 }

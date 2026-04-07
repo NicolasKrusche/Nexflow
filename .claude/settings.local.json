@@ -47,7 +47,10 @@
       "Bash(ls \"H:/Archon/ARCHON_1/apps/web/app/\\(editor\\)/programs/\")",
       "Bash(ls \"H:/Archon/ARCHON_1/apps/web/app/\\(editor\\)/programs/[id]/editor/\")",
       "Bash(ls \"H:/Archon/ARCHON_1/apps/web/app/\\(editor\\)/\")",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001)",
+      "Bash(pnpm test:*)",
+      "Bash(npx kill-port:*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000)"
     ]
   }
 }

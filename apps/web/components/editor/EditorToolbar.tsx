@@ -23,6 +23,7 @@ interface EditorToolbarProps {
   onRun: () => void;
   onBack: () => void;
   onAddNode: (type: "trigger" | "agent" | "step") => void;
+  onHistory: () => void;
 }
 
 // ─── Icons (inline SVG, no icon library dep) ─────────────────────────────────
@@ -71,6 +72,15 @@ function ValidateIcon() {
   );
 }
 
+function HistoryIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.75} className="h-3.5 w-3.5">
+      <circle cx="8" cy="8" r="6" />
+      <path d="M8 5v3l2 1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 // ─── Separator ────────────────────────────────────────────────────────────────
 
 function Sep() {
@@ -94,6 +104,7 @@ export function EditorToolbar({
   onRun,
   onBack,
   onAddNode,
+  onHistory,
 }: EditorToolbarProps) {
   const hasErrors = validationResult && !validationResult.valid;
   const isValid = validationResult?.valid === true;
@@ -199,6 +210,18 @@ export function EditorToolbar({
           <RedoIcon />
         </Button>
       </div>
+
+      {/* History */}
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={onHistory}
+        className="gap-1.5 text-muted-foreground hover:text-foreground"
+        title="Version history"
+      >
+        <HistoryIcon />
+        History
+      </Button>
 
       {/* Spacer pushes remaining buttons to the right */}
       <div className="flex-1" />
