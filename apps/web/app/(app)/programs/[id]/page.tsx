@@ -6,7 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RunPanel } from "./run-panel";
+import { ExecutionControls } from "./execution-controls";
 import type { Json } from "@flowos/db";
+import { createServiceClient } from "@/lib/api";
 
 type SchemaNode = { id: string; label: string; description: string; type: string };
 
@@ -26,17 +28,48 @@ export default async function ProgramPage({ params }: { params: { id: string } }
 
   const { data, error } = await supabase
     .from("programs")
-    .select("id, name, description, execution_mode, is_active, schema, schema_version, last_run_at, updated_at")
+    .select("id, name, description, execution_mode, conflict_policy, is_active, schema, schema_version, last_run_at, updated_at")
     .eq("id", params.id)
     .eq("user_id", user.id)
     .single();
 
   if (error || !data) return notFound();
 
-  // Cast to bypass Supabase's narrow return type post-notFound
-  type ProgramRow = typeof data & { schema: Json };
+  type ProgramRow = typeof data & { schema: Json; conflict_policy: string };
   const program = data as ProgramRow;
   const { nodes, edges, triggers } = parseSchema(program.schema);
+
+  // Fetch active trigger count from DB
+  const serviceClient = createServiceClient();
+  const { data: triggerRows } = await serviceClient
+    .from("triggers")
+    .select("id, type, is_active")
+    .eq("program_id", params.id);
+
+  const dbTriggerCount = (triggerRows ?? []).length;
+  const activeTriggerCount = (triggerRows ?? []).filter(
+    (t: { is_active: boolean }) => t.is_active
+  ).length;
+
+  // Fetch conflict info
+  const { data: linkedConns } = await serviceClient
+    .from("program_connections")
+    .select("connection_id")
+    .eq("program_id", params.id);
+
+  const connectionIds = (linkedConns ?? []).map(
+    (r: { connection_id: string }) => r.connection_id
+  );
+  let conflictingProgramCount = 0;
+  if (connectionIds.length > 0) {
+    const { data: sharedLinks } = await serviceClient
+      .from("program_connections")
+      .select("program_id")
+      .in("connection_id", connectionIds)
+      .neq("program_id", params.id);
+    const uniq = new Set((sharedLinks ?? []).map((r: { program_id: string }) => r.program_id));
+    conflictingProgramCount = uniq.size;
+  }
 
   const NODE_BADGE: Record<string, "default" | "secondary" | "outline"> = {
     trigger: "default",
@@ -47,7 +80,8 @@ export default async function ProgramPage({ params }: { params: { id: string } }
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div className="flex items-center justify-between gap-4">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
         <div>
           <Link
             href="/dashboard"
@@ -60,7 +94,7 @@ export default async function ProgramPage({ params }: { params: { id: string } }
             <p className="text-sm text-muted-foreground mt-0.5">{program.description}</p>
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
           <Badge variant={program.is_active ? "success" : "secondary"}>
             {program.is_active ? "Active" : "Inactive"}
           </Badge>
@@ -71,22 +105,75 @@ export default async function ProgramPage({ params }: { params: { id: string } }
         </div>
       </div>
 
+      {/* Conflict warning */}
+      {conflictingProgramCount > 0 && (
+        <div className="rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-700 dark:text-yellow-400 flex items-start gap-2">
+          <span className="shrink-0 mt-0.5">⚠</span>
+          <span>
+            {conflictingProgramCount} other program{conflictingProgramCount > 1 ? "s" : ""} share connections with this program.
+            {" "}
+            <Link
+              href={`/programs/${params.id}/conflicts`}
+              className="underline underline-offset-2"
+            >
+              View conflicts
+            </Link>
+            {" — "}current policy: <strong className="capitalize">{program.conflict_policy}</strong>.
+          </span>
+        </div>
+      )}
+
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         {[
           { label: "Nodes", value: nodes.length },
           { label: "Edges", value: edges.length },
-          { label: "Triggers", value: triggers.length },
-        ].map(({ label, value }) => (
-          <Card key={label}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xs text-muted-foreground uppercase tracking-wide">{label}</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <p className="text-2xl font-semibold">{value}</p>
-            </CardContent>
+          {
+            label: "Triggers",
+            value: dbTriggerCount,
+            sub: activeTriggerCount > 0 ? `${activeTriggerCount} active` : undefined,
+            href: `/programs/${params.id}/triggers`,
+          },
+          { label: "Schema v", value: program.schema_version ?? 1 },
+        ].map(({ label, value, sub, href }) => (
+          <Card key={label} className={href ? "hover:bg-accent/50 transition-colors" : ""}>
+            {href ? (
+              <Link href={href} className="block">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs text-muted-foreground uppercase tracking-wide">{label}</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <p className="text-2xl font-semibold">{value}</p>
+                  {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
+                </CardContent>
+              </Link>
+            ) : (
+              <>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-xs text-muted-foreground uppercase tracking-wide">{label}</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <p className="text-2xl font-semibold">{value}</p>
+                </CardContent>
+              </>
+            )}
           </Card>
         ))}
+      </div>
+
+      {/* Quick nav */}
+      <div className="flex gap-2 flex-wrap">
+        <Button asChild variant="outline" size="sm">
+          <Link href={`/programs/${params.id}/runs`}>View Run History</Link>
+        </Button>
+        <Button asChild variant="outline" size="sm">
+          <Link href={`/programs/${params.id}/triggers`}>Manage Triggers</Link>
+        </Button>
+        {conflictingProgramCount > 0 && (
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/programs/${params.id}/conflicts`}>Conflict Settings</Link>
+          </Button>
+        )}
       </div>
 
       {/* Node list */}
@@ -112,6 +199,13 @@ export default async function ProgramPage({ params }: { params: { id: string } }
           )}
         </CardContent>
       </Card>
+
+      {/* Execution controls (mode switcher + conflict policy) */}
+      <ExecutionControls
+        programId={program.id}
+        executionMode={program.execution_mode ?? "supervised"}
+        conflictPolicy={program.conflict_policy ?? "queue"}
+      />
 
       {/* Run panel */}
       <RunPanel programId={program.id} />

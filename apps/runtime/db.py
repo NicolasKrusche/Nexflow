@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 from supabase import create_client, Client
 
@@ -36,6 +37,18 @@ async def create_run(
 
 async def update_run(db: Client, run_id: str, **kwargs: Any) -> None:
     db.table("runs").update(kwargs).eq("id", run_id).execute()
+
+
+async def get_run_status(db: Client, run_id: str) -> str:
+    """Fetch the current status of a run (for cancellation checks)."""
+    result = (
+        db.table("runs")
+        .select("status")
+        .eq("id", run_id)
+        .single()
+        .execute()
+    )
+    return result.data.get("status", "unknown")
 
 
 async def create_node_execution(db: Client, run_id: str, node_id: str) -> dict:
@@ -93,3 +106,67 @@ async def get_approval(db: Client, node_execution_id: str) -> Optional[dict]:
         .execute()
     )
     return result.data
+
+
+# ─── Resource Locking ─────────────────────────────────────────────────────────
+
+LOCK_TTL_MINUTES = 30
+
+
+async def acquire_resource_lock(
+    db: Client, run_id: str, resource_type: str, resource_id: str
+) -> bool:
+    """
+    Try to acquire a resource lock. Returns True if acquired, False if conflict.
+    Uses INSERT with ON CONFLICT DO NOTHING to be atomic.
+    """
+    expires_at = (
+        datetime.now(timezone.utc) + timedelta(minutes=LOCK_TTL_MINUTES)
+    ).isoformat()
+
+    try:
+        result = (
+            db.table("resource_locks")
+            .insert(
+                {
+                    "resource_type": resource_type,
+                    "resource_id": resource_id,
+                    "locked_by_run_id": run_id,
+                    "expires_at": expires_at,
+                }
+            )
+            .execute()
+        )
+        return len(result.data) > 0
+    except Exception:
+        # Unique constraint violation = lock already held
+        return False
+
+
+async def release_run_locks(db: Client, run_id: str) -> None:
+    """Release all resource locks held by this run."""
+    db.table("resource_locks").delete().eq("locked_by_run_id", run_id).execute()
+
+
+async def get_existing_lock(
+    db: Client, resource_type: str, resource_id: str
+) -> Optional[dict]:
+    """Check if a resource is currently locked (and not expired)."""
+    now = datetime.now(timezone.utc).isoformat()
+    result = (
+        db.table("resource_locks")
+        .select("id, locked_by_run_id, expires_at")
+        .eq("resource_type", resource_type)
+        .eq("resource_id", resource_id)
+        .gt("expires_at", now)
+        .maybe_single()
+        .execute()
+    )
+    return result.data
+
+
+async def cleanup_stale_locks(db: Client) -> int:
+    """Delete expired locks. Returns number deleted."""
+    now = datetime.now(timezone.utc).isoformat()
+    result = db.table("resource_locks").delete().lt("expires_at", now).execute()
+    return len(result.data)

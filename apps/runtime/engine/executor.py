@@ -10,9 +10,14 @@ import httpx
 
 from schema import AgentConfig, ProgramSchema, SchemaNode, StepConfig
 from db import (
+    acquire_resource_lock,
+    cleanup_stale_locks,
     create_approval,
     create_node_execution,
     get_db,
+    get_existing_lock,
+    get_run_status,
+    release_run_locks,
     update_node_execution,
     update_run,
 )
@@ -26,11 +31,34 @@ class ExecutionError(Exception):
         super().__init__(message)
 
 
+class CancellationError(ExecutionError):
+    def __init__(self) -> None:
+        super().__init__("CANCELLED", "Run was cancelled", None)
+
+
+class ConflictError(ExecutionError):
+    def __init__(self, resource_id: str) -> None:
+        super().__init__(
+            "RESOURCE_CONFLICT",
+            f"Resource {resource_id} is locked by another run",
+            None,
+        )
+
+
 class ProgramExecutor:
-    def __init__(self, schema: ProgramSchema, run_id: str, user_id: str) -> None:
+    def __init__(
+        self,
+        schema: ProgramSchema,
+        run_id: str,
+        user_id: str,
+        execution_mode: str = "autonomous",
+        conflict_policy: str = "queue",
+    ) -> None:
         self.schema = schema
         self.run_id = run_id
         self.user_id = user_id
+        self.execution_mode = execution_mode
+        self.conflict_policy = conflict_policy
         self.db = get_db()
         self.node_map: dict[str, SchemaNode] = {n.id: n for n in schema.nodes}
         self.edges_from: dict[str, list] = {}
@@ -39,6 +67,12 @@ class ProgramExecutor:
 
     async def execute(self, trigger_payload: dict | None = None) -> dict[str, Any]:
         """Run the program. Returns final state."""
+        # Clean up stale locks before starting
+        await cleanup_stale_locks(self.db)
+
+        # Check for resource conflicts on all write-access connections used by this program
+        await self._acquire_program_locks()
+
         # Find trigger node
         trigger_node = next((n for n in self.schema.nodes if n.type == "trigger"), None)
         if not trigger_node:
@@ -68,6 +102,11 @@ class ProgramExecutor:
         queue: list[str] = [trigger_node.id]
 
         while queue:
+            # Cancellation check on each iteration
+            current_status = await get_run_status(self.db, self.run_id)
+            if current_status == "cancelled":
+                raise CancellationError()
+
             current_id = queue.pop(0)
             outgoing = self.edges_from.get(current_id, [])
 
@@ -85,6 +124,8 @@ class ProgramExecutor:
                     state[edge.to] = output
                     visited.add(edge.to)
                     queue.append(edge.to)
+                except CancellationError:
+                    raise
                 except ExecutionError as e:
                     await update_node_execution(
                         self.db,
@@ -130,6 +171,15 @@ class ProgramExecutor:
             input_payload=input_data,
         )
 
+        # In manual mode: pause each node and wait for step-through approval
+        if self.execution_mode == "manual" and node.type != "trigger":
+            approved = await self._request_step_approval(node, input_data, "Manual step-through")
+            if not approved:
+                await update_node_execution(
+                    self.db, self.run_id, node.id, status="skipped", completed_at="now()"
+                )
+                return {}
+
         try:
             if node.type == "agent":
                 output = await self._execute_agent(node, input_data)
@@ -157,9 +207,11 @@ class ProgramExecutor:
     async def _execute_agent(self, node: SchemaNode, input_data: dict) -> dict:
         cfg: AgentConfig = node.config  # type: ignore[assignment]
 
-        # Check for approval requirement
-        if cfg.requires_approval:
-            approved = await self._request_approval(node, input_data)
+        # Supervised mode: every agent needs approval regardless of node config
+        needs_approval = cfg.requires_approval or self.execution_mode == "supervised"
+
+        if needs_approval:
+            approved = await self._request_step_approval(node, input_data, "Agent approval required")
             if not approved:
                 await update_node_execution(
                     self.db, self.run_id, node.id, status="skipped", completed_at="now()"
@@ -270,7 +322,9 @@ class ProgramExecutor:
         # Phase 5 will implement full connectors — for now pass through
         return input_data
 
-    async def _request_approval(self, node: SchemaNode, input_data: dict) -> bool:
+    async def _request_step_approval(
+        self, node: SchemaNode, input_data: dict, reason: str
+    ) -> bool:
         """Insert approval row and poll until resolved (up to timeout)."""
         result = (
             self.db.table("node_executions")
@@ -294,15 +348,27 @@ class ProgramExecutor:
                 "node_label": node.label,
                 "input": input_data,
                 "program_id": self.schema.program_id,
+                "reason": reason,
+                "execution_mode": self.execution_mode,
             },
         )
 
-        cfg: AgentConfig = node.config  # type: ignore[assignment]
-        timeout_seconds = cfg.approval_timeout_hours * 3600
+        # Determine timeout
+        timeout_seconds = 86400  # 24h default for supervised/manual
+        if node.type == "agent":
+            cfg: AgentConfig = node.config  # type: ignore[assignment]
+            if hasattr(cfg, "approval_timeout_hours"):
+                timeout_seconds = cfg.approval_timeout_hours * 3600
+
         deadline = time.time() + timeout_seconds
         poll_interval = 5  # seconds
 
         while time.time() < deadline:
+            # Check for cancellation during approval wait
+            current_status = await get_run_status(self.db, self.run_id)
+            if current_status == "cancelled":
+                raise CancellationError()
+
             await asyncio.sleep(poll_interval)
             approval = (
                 self.db.table("approvals")
@@ -319,6 +385,70 @@ class ProgramExecutor:
 
         # Timeout — treat as rejected
         return False
+
+    # Keep old method name as alias for backward compat
+    async def _request_approval(self, node: SchemaNode, input_data: dict) -> bool:
+        return await self._request_step_approval(node, input_data, "Approval required")
+
+    async def _acquire_program_locks(self) -> None:
+        """
+        Acquire resource locks for all connections used by this program.
+        Respects conflict_policy: queue (retry), skip/fail (raise).
+        """
+        # Fetch connections linked to this program
+        result = (
+            self.db.table("program_connections")
+            .select("connection_id")
+            .eq("program_id", self.schema.program_id)
+            .execute()
+        )
+        connection_ids = [row["connection_id"] for row in (result.data or [])]
+
+        for conn_id in connection_ids:
+            await self._acquire_one_lock("connection", conn_id)
+
+    async def _acquire_one_lock(self, resource_type: str, resource_id: str) -> None:
+        """Try to acquire a single lock. Respects conflict_policy."""
+        # Check for existing (non-expired) lock
+        existing = await get_existing_lock(self.db, resource_type, resource_id)
+
+        if existing and existing.get("locked_by_run_id") != self.run_id:
+            # Locked by another run
+            if self.conflict_policy == "skip":
+                raise ExecutionError(
+                    "CONFLICT_SKIP",
+                    f"Resource {resource_id} is locked — policy=skip, run skipped",
+                )
+            elif self.conflict_policy == "fail":
+                raise ConflictError(resource_id)
+            else:  # queue: wait up to 5 minutes
+                waited = 0
+                max_wait = 300  # 5 minutes
+                while waited < max_wait:
+                    await asyncio.sleep(10)
+                    waited += 10
+                    # Re-check cancellation while waiting
+                    current_status = await get_run_status(self.db, self.run_id)
+                    if current_status == "cancelled":
+                        raise CancellationError()
+                    lock = await get_existing_lock(self.db, resource_type, resource_id)
+                    if not lock:
+                        break
+                else:
+                    raise ExecutionError(
+                        "LOCK_TIMEOUT",
+                        f"Timed out waiting for lock on {resource_id}",
+                    )
+
+        # Acquire the lock
+        acquired = await acquire_resource_lock(
+            self.db, self.run_id, resource_type, resource_id
+        )
+        if not acquired:
+            # Race condition — another run got it first
+            if self.conflict_policy == "fail":
+                raise ConflictError(resource_id)
+            # For queue/skip, we just proceed (best-effort locking for MVP)
 
     async def _fetch_api_key(self, api_key_ref: str) -> str:
         """Fetch the actual API key value from the Next.js internal vault endpoint."""

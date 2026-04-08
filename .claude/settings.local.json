@@ -71,7 +71,19 @@
       "Bash(sed -i 's/from \\\\.db import/from db import/g; s/from \\\\.engine\\\\.executor import/from engine.executor import/g; s/from \\\\.schema import/from schema import/g' \"H:/Archon/ARCHON_1/apps/runtime/main.py\")",
       "Bash(sed -i 's/from \\\\.\\\\.schema import/from schema import/g; s/from \\\\.\\\\.db import/from db import/g' \"H:/Archon/ARCHON_1/apps/runtime/engine/executor.py\")",
       "Bash(git add:*)",
-      "Bash(git -C \"H:/Archon/ARCHON_1\" status --short)"
+      "Bash(git -C \"H:/Archon/ARCHON_1\" status --short)",
+      "Bash(ls -la \"H:/Archon/ARCHON_1/apps/web/app/\\(app\\)/\")",
+      "Bash(find \"H:/Archon/ARCHON_1/apps/web/app/\\(app\\)\" -type f)",
+      "Bash(find \"H:/Archon/ARCHON_1/apps/web/app/\\(app\\)/programs/[id]\" -type f -name \"*.tsx\" -o -name \"*.ts\")",
+      "Bash(pnpm --filter @flowos/web add inngest)",
+      "Bash(pnpm --filter @flowos/web add cron-parser)",
+      "Bash(mkdir -p \"H:/Archon/ARCHON_1/apps/web/app/api/programs/[id]/triggers\")",
+      "Bash(mkdir -p \"H:/Archon/ARCHON_1/apps/web/app/api/programs/[id]/triggers/[triggerId]\")",
+      "Bash(mkdir -p \"H:/Archon/ARCHON_1/apps/web/app/api/triggers/webhook/[token]\")",
+      "Bash(mkdir -p \"H:/Archon/ARCHON_1/apps/web/app/api/runs/[id]/cancel\")",
+      "Bash(mkdir -p \"H:/Archon/ARCHON_1/apps/web/app/api/internal/runs/[id]/complete\")",
+      "Bash(mkdir -p \"H:/Archon/ARCHON_1/apps/web/app/api/programs/[id]/conflicts\")",
+      "Bash(mkdir -p \"H:/Archon/ARCHON_1/apps/web/app/api/programs/[id]/execution-mode\")"
     ]
   }
 }
