@@ -77,10 +77,23 @@ export default async function EditorPage({
     })
   );
 
-  // ── Run post-genesis validation ───────────────────────────────────────────
-  // Pass empty connections array — live connections checked client-side via pre-flight.
+  // ── Fetch connections linked to this program ──────────────────────────────
 
-  const initialValidation = validatePostGenesis(parsedSchema, []);
+  type LinkedConnectionRow = { connections: { id: string; name: string; provider: string; scopes: string[] | null } };
+
+  const { data: rawLinkedConns } = await supabase
+    .from("program_connections")
+    .select("connections(id, name, provider, scopes)")
+    .eq("program_id", program.id);
+
+  const linkedConnections = ((rawLinkedConns as unknown as LinkedConnectionRow[]) ?? [])
+    .map((r) => r.connections)
+    .filter(Boolean)
+    .map((c) => ({ id: c.id, name: c.name, provider: c.provider, scopes: c.scopes ?? [] }));
+
+  // ── Run post-genesis validation ───────────────────────────────────────────
+
+  const initialValidation = validatePostGenesis(parsedSchema, linkedConnections);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -90,6 +103,7 @@ export default async function EditorPage({
       initialSchema={parsedSchema}
       initialValidation={initialValidation}
       apiKeys={apiKeys}
+      linkedConnections={linkedConnections}
     />
   );
 }

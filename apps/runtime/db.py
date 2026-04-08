@@ -170,3 +170,25 @@ async def cleanup_stale_locks(db: Client) -> int:
     now = datetime.now(timezone.utc).isoformat()
     result = db.table("resource_locks").delete().lt("expires_at", now).execute()
     return len(result.data)
+
+
+async def get_credential(ref: str, user_id: str) -> dict:
+    db = get_db()
+    result = db.rpc("get_decrypted_secret", {
+        "secret_name": f"{ref}_{user_id}"
+    }).execute()
+    if not result.data:
+        raise ValueError(f"Credential '{ref}' not found for user")
+    return result.data
+
+
+async def get_active_cron_workflows() -> list:
+    db = get_db()
+    result = (
+        db.table("programs")
+        .select("*")
+        .eq("trigger_type", "trigger.cron")
+        .eq("status", "active")
+        .execute()
+    )
+    return result.data or []

@@ -1,5 +1,9 @@
 import type { ProgramSchema, Node as SchemaNode, Edge as SchemaEdge } from "@flowos/schema";
-import type { ValidationResult } from "@/lib/validation";
+import type {
+  ValidationResult,
+  ValidationError,
+  ValidationWarning,
+} from "@/lib/validation";
 import type { Node as ReactFlowNode, Edge as ReactFlowEdge } from "@xyflow/react";
 import { MarkerType } from "@xyflow/react";
 
@@ -11,13 +15,44 @@ export function toReactFlow(
   schema: ProgramSchema,
   validationResult: ValidationResult | null
 ): { nodes: ReactFlowNode[]; edges: ReactFlowEdge[] } {
+  const nodeErrorsById = new Map<string, ValidationError[]>();
+  const edgeErrorsById = new Map<string, ValidationError[]>();
+  const nodeWarningsById = new Map<string, ValidationWarning[]>();
+
+  for (const error of validationResult?.errors ?? []) {
+    if (error.node_id) {
+      const bucket = nodeErrorsById.get(error.node_id);
+      if (bucket) {
+        bucket.push(error);
+      } else {
+        nodeErrorsById.set(error.node_id, [error]);
+      }
+    }
+    if (error.edge_id) {
+      const bucket = edgeErrorsById.get(error.edge_id);
+      if (bucket) {
+        bucket.push(error);
+      } else {
+        edgeErrorsById.set(error.edge_id, [error]);
+      }
+    }
+  }
+
+  for (const warning of validationResult?.warnings ?? []) {
+    if (!warning.node_id) continue;
+    const bucket = nodeWarningsById.get(warning.node_id);
+    if (bucket) {
+      bucket.push(warning);
+    } else {
+      nodeWarningsById.set(warning.node_id, [warning]);
+    }
+  }
+
   const nodes: ReactFlowNode[] = schema.nodes.map((node) => {
     const validationState =
       validationResult?.node_states[node.id] ?? "valid";
-    const errors =
-      validationResult?.errors.filter((e) => e.node_id === node.id) ?? [];
-    const warnings =
-      validationResult?.warnings.filter((w) => w.node_id === node.id) ?? [];
+    const errors = nodeErrorsById.get(node.id) ?? [];
+    const warnings = nodeWarningsById.get(node.id) ?? [];
 
     return {
       id: node.id,
@@ -37,8 +72,7 @@ export function toReactFlow(
   });
 
   const edges: ReactFlowEdge[] = schema.edges.map((edge) => {
-    const validationErrors =
-      validationResult?.errors.filter((e) => e.edge_id === edge.id) ?? [];
+    const validationErrors = edgeErrorsById.get(edge.id) ?? [];
 
     return {
       id: edge.id,

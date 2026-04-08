@@ -39,9 +39,28 @@ class StepConfig:
 
 
 @dataclass
-class ConnectionConfig:
+class OAuthConnectionConfig:
     scope_access: str
     scope_required: list[str]
+    connector_type: Literal["oauth"] = "oauth"
+
+
+@dataclass
+class HttpConnectionConfig:
+    connector_type: Literal["http"] = "http"
+    method: str = "GET"
+    url: str = ""
+    auth_type: str = "none"
+    auth_value: Optional[str] = None
+    query_params: list[dict[str, str]] = field(default_factory=list)
+    headers: list[dict[str, str]] = field(default_factory=list)
+    body: Optional[str] = None
+    parse_response: bool = True
+    timeout_seconds: Optional[float] = None
+    retry: Optional[RetryConfig] = None
+
+
+ConnectionConfig = Union[OAuthConnectionConfig, HttpConnectionConfig]
 
 
 @dataclass
@@ -114,7 +133,57 @@ def _parse_node_config(
         extra = {k: v for k, v in raw.items() if k != "logic_type"}
         return StepConfig(logic_type=logic_type, extra=extra)
     elif node_type == "connection":
-        return ConnectionConfig(
+        connector_type = raw.get("connector_type")
+        if connector_type == "http":
+            timeout_raw = raw.get("timeout_seconds")
+            timeout_seconds = (
+                float(timeout_raw)
+                if timeout_raw not in (None, "")
+                else None
+            )
+            retry_raw = raw.get("retry")
+            retry_cfg = _parse_retry(retry_raw) if isinstance(retry_raw, dict) else None
+
+            query_params_raw = raw.get("query_params") or []
+            headers_raw = raw.get("headers") or []
+
+            query_params = [
+                {
+                    "key": str(item.get("key", "")),
+                    "value": str(item.get("value", "")),
+                }
+                for item in query_params_raw
+                if isinstance(item, dict)
+            ]
+            headers = [
+                {
+                    "key": str(item.get("key", "")),
+                    "value": str(item.get("value", "")),
+                }
+                for item in headers_raw
+                if isinstance(item, dict)
+            ]
+
+            auth_value = raw.get("auth_value")
+            body = raw.get("body")
+
+            return HttpConnectionConfig(
+                connector_type="http",
+                method=str(raw.get("method", "GET")).upper(),
+                url=str(raw.get("url", "")),
+                auth_type=str(raw.get("auth_type", "none")),
+                auth_value=str(auth_value) if auth_value is not None else None,
+                query_params=query_params,
+                headers=headers,
+                body=str(body) if body is not None else None,
+                parse_response=bool(raw.get("parse_response", True)),
+                timeout_seconds=timeout_seconds,
+                retry=retry_cfg,
+            )
+
+        # Backward-compatible OAuth-style connection config.
+        return OAuthConnectionConfig(
+            connector_type="oauth",
             scope_access=raw.get("scope_access", "read"),
             scope_required=list(raw.get("scope_required") or []),
         )

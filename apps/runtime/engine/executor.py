@@ -3,17 +3,29 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import time
 from typing import Any, Callable
 
 import httpx
+from langgraph.graph import StateGraph
+from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
 
-from schema import AgentConfig, ProgramSchema, SchemaNode, StepConfig
+from schema import (
+    AgentConfig,
+    HttpConnectionConfig,
+    ProgramSchema,
+    RetryConfig,
+    SchemaNode,
+    StepConfig,
+)
 from db import (
     acquire_resource_lock,
     cleanup_stale_locks,
     create_approval,
     create_node_execution,
+    get_credential,
     get_db,
     get_existing_lock,
     get_run_status,
@@ -21,6 +33,44 @@ from db import (
     update_node_execution,
     update_run,
 )
+
+
+def _resolve_expressions(template: str, inputs: dict) -> str:
+    """Replace {{key}} and {{node_id.field}} expressions with values from inputs."""
+    def replacer(match: re.Match) -> str:
+        expr = match.group(1).strip()
+        parts = expr.split(".")
+        val: Any = inputs
+        for part in parts:
+            if isinstance(val, dict):
+                val = val.get(part, match.group(0))
+            else:
+                return match.group(0)
+        return str(val)
+    return re.sub(r"\{\{([^}]+)\}\}", replacer, template)
+
+
+async def run_agent(config: dict, inputs: dict, credentials: Any) -> dict:
+    model = config.get("model", "claude")
+    api_key = credentials if isinstance(credentials, str) else (credentials or {}).get("value", "")
+
+    if "claude" in str(model) or model == "claude":
+        llm = ChatAnthropic(model="claude-opus-4-5-20251001", api_key=api_key or None)
+    else:
+        llm = ChatOpenAI(model="gpt-4", api_key=api_key or None)
+
+    def agent_node(state: dict) -> dict:
+        prompt = _resolve_expressions(config.get("prompt", config.get("system_prompt", "")), inputs)
+        response = llm.invoke(prompt)
+        output_field = config.get("outputField", "output")
+        return {output_field: response.content}
+
+    graph = StateGraph(dict)
+    graph.add_node("agent", agent_node)
+    graph.set_entry_point("agent")
+    graph.set_finish_point("agent")
+    result = await graph.compile().ainvoke({})
+    return result
 
 
 class ExecutionError(Exception):
@@ -183,6 +233,17 @@ class ProgramExecutor:
         try:
             if node.type == "agent":
                 output = await self._execute_agent(node, input_data)
+            elif node.type.startswith("agent"):
+                cfg = node.config
+                api_key_ref = getattr(cfg, "api_key_ref", None)
+                credentials = None
+                if api_key_ref and api_key_ref != "__USER_ASSIGNED__":
+                    credentials = await get_credential(api_key_ref, self.user_id)
+                output = await run_agent(
+                    cfg.__dict__ if hasattr(cfg, "__dict__") else {},
+                    input_data,
+                    credentials,
+                )
             elif node.type == "step":
                 output = await self._execute_step(node, input_data)
             elif node.type == "connection":
@@ -319,8 +380,116 @@ class ProgramExecutor:
         return input_data
 
     async def _execute_connection(self, node: SchemaNode, input_data: dict) -> dict:
-        # Phase 5 will implement full connectors — for now pass through
+        cfg = node.config
+        if isinstance(cfg, HttpConnectionConfig):
+            retry_cfg = cfg.retry or RetryConfig(
+                max_attempts=1,
+                backoff="none",
+                backoff_base_seconds=0,
+                fail_program_on_exhaust=False,
+            )
+            return await self._with_retry(
+                lambda: self._execute_http_connection(cfg, input_data),
+                retry_cfg,
+                node.id,
+            )
         return input_data
+
+    async def _execute_http_connection(
+        self,
+        cfg: HttpConnectionConfig,
+        input_data: dict,
+    ) -> dict:
+        if not cfg.url.strip():
+            raise ExecutionError("HTTP_CONFIG_INVALID", "HTTP connector URL is required")
+
+        method = cfg.method.upper().strip() or "GET"
+        params = {
+            item.get("key", ""): item.get("value", "")
+            for item in cfg.query_params
+            if item.get("key", "").strip()
+        }
+        headers = {
+            item.get("key", ""): item.get("value", "")
+            for item in cfg.headers
+            if item.get("key", "").strip()
+        }
+
+        auth: tuple[str, str] | None = None
+        if cfg.auth_type == "bearer":
+            if not cfg.auth_value:
+                raise ExecutionError(
+                    "HTTP_CONFIG_INVALID",
+                    "Bearer auth selected but auth value is missing",
+                )
+            headers.setdefault("Authorization", f"Bearer {cfg.auth_value}")
+        elif cfg.auth_type == "basic":
+            if not cfg.auth_value or ":" not in cfg.auth_value:
+                raise ExecutionError(
+                    "HTTP_CONFIG_INVALID",
+                    "Basic auth requires auth value in username:password format",
+                )
+            username, password = cfg.auth_value.split(":", 1)
+            auth = (username, password)
+        elif cfg.auth_type == "api_key_header":
+            if not cfg.auth_value:
+                raise ExecutionError(
+                    "HTTP_CONFIG_INVALID",
+                    "API key header auth selected but auth value is missing",
+                )
+            headers.setdefault("X-API-Key", cfg.auth_value)
+        elif cfg.auth_type == "api_key_query":
+            if not cfg.auth_value:
+                raise ExecutionError(
+                    "HTTP_CONFIG_INVALID",
+                    "API key query auth selected but auth value is missing",
+                )
+            params.setdefault("api_key", cfg.auth_value)
+
+        timeout_seconds = cfg.timeout_seconds if cfg.timeout_seconds else 30.0
+
+        request_body = None
+        if cfg.body:
+            body_text = cfg.body.strip()
+            if body_text:
+                try:
+                    request_body = {"json": json.loads(body_text)}
+                except (json.JSONDecodeError, ValueError):
+                    request_body = {"content": cfg.body}
+        elif method in {"POST", "PUT", "PATCH"} and input_data:
+            request_body = {"json": input_data}
+
+        async with httpx.AsyncClient(timeout=timeout_seconds) as client:
+            response = await client.request(
+                method=method,
+                url=cfg.url,
+                params=params if params else None,
+                headers=headers if headers else None,
+                auth=auth,
+                **(request_body or {}),
+            )
+
+        if response.status_code >= 400:
+            body_preview = response.text[:500]
+            raise ExecutionError(
+                "HTTP_REQUEST_FAILED",
+                f"{method} {cfg.url} returned {response.status_code}: {body_preview}",
+            )
+
+        if cfg.parse_response:
+            try:
+                body_output: Any = response.json()
+            except (json.JSONDecodeError, ValueError):
+                body_output = response.text
+        else:
+            body_output = response.text
+
+        return {
+            "status_code": response.status_code,
+            "url": str(response.request.url),
+            "headers": dict(response.headers),
+            "body": body_output,
+        }
 
     async def _request_step_approval(
         self, node: SchemaNode, input_data: dict, reason: str

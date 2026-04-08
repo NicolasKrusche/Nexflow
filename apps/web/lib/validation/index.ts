@@ -132,7 +132,8 @@ export function validatePostGenesis(
     const config = (node as AgentNode).config;
     const scopeAccess = "scope_access" in config ? config.scope_access : null;
     const nodeNeedsWrite = scopeAccess === "write" || scopeAccess === "read_write";
-    const programGrantedWrite = (connection.scopes ?? []).some((s) => s.includes("write"));
+    const scopes = connection.scopes ?? [];
+    const programGrantedWrite = scopes.length > 0 && scopes.some((s) => !s.toLowerCase().includes("readonly"));
     if (nodeNeedsWrite && !programGrantedWrite)
       error("ERR_012", node.id, `${node.label} needs write access to ${node.connection} but only read was granted`, "Go to connection settings and grant write permission, or change this node to read-only");
   });

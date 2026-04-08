@@ -59,7 +59,7 @@ const edgeTypes = {
 // ─── Default node configs for new nodes ──────────────────────────────────────
 
 function makeDefaultNode(
-  type: "trigger" | "agent" | "step",
+  type: "trigger" | "agent" | "step" | "connection",
   id: string,
   position: { x: number; y: number }
 ): SchemaNode {
@@ -104,6 +104,30 @@ function makeDefaultNode(
       status: "idle",
     };
   }
+  if (type === "connection") {
+    return {
+      id,
+      type: "connection",
+      label: "HTTP Request",
+      description: "",
+      connection: null,
+      config: {
+        connector_type: "http",
+        method: "GET",
+        url: "",
+        auth_type: "none",
+        auth_value: null,
+        query_params: [],
+        headers: [],
+        body: null,
+        parse_response: true,
+        timeout_seconds: null,
+        retry: null,
+      },
+      position,
+      status: "idle",
+    };
+  }
   // step
   return {
     id,
@@ -129,6 +153,7 @@ interface EditorShellProps {
   initialSchema: ProgramSchema;
   initialValidation: ValidationResult | null;
   apiKeys: ApiKey[];
+  linkedConnections: { id: string; name: string; provider: string; scopes: string[] }[];
 }
 
 // ─── EditorShell ──────────────────────────────────────────────────────────────
@@ -138,6 +163,7 @@ export function EditorShell({
   initialSchema,
   initialValidation,
   apiKeys,
+  linkedConnections,
 }: EditorShellProps) {
   const router = useRouter();
 
@@ -235,11 +261,9 @@ export function EditorShell({
   // ── Validate ──────────────────────────────────────────────────────────────
 
   const handleValidate = useCallback(() => {
-    // Run post-genesis validation with empty connections (live connections
-    // checked client-side via pre-flight; connections fetched separately)
-    const result = validatePostGenesis(state.schema, []);
+    const result = validatePostGenesis(state.schema, linkedConnections);
     dispatch({ type: "SET_VALIDATION", result });
-  }, [state.schema]);
+  }, [state.schema, linkedConnections]);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
 
@@ -390,17 +414,28 @@ export function EditorShell({
     (changes: NodeChange[]) => {
       setRfNodes((nds) => applyNodeChanges(changes, nds));
 
-      // Capture position changes and sync to reducer (debounced)
-      const posChanges = changes.filter(
-        (c): c is NodeChange & { type: "position"; position: { x: number; y: number } } =>
-          c.type === "position" && c.position != null
+      // Sync positions to schema only after drag ends.
+      // React Flow emits many "position" changes while dragging (dragging=true);
+      // writing schema on each tick causes full graph re-sync and UI jank.
+      const finalPositionChanges = changes.filter(
+        (
+          c
+        ): c is NodeChange & {
+          type: "position";
+          position: { x: number; y: number };
+          dragging?: boolean;
+        } => c.type === "position" && c.position != null && c.dragging !== true
       );
-      if (posChanges.length > 0) {
+      if (finalPositionChanges.length > 0) {
+        const latestByNodeId = new Map<string, { x: number; y: number }>();
+        for (const change of finalPositionChanges) {
+          latestByNodeId.set(change.id, change.position);
+        }
         dispatch({
           type: "SET_POSITIONS",
-          nodes: posChanges.map((c) => ({
-            id: c.id,
-            position: (c as { id: string; position: { x: number; y: number } }).position,
+          nodes: Array.from(latestByNodeId.entries()).map(([id, position]) => ({
+            id,
+            position,
           })),
         });
       }
@@ -477,7 +512,7 @@ export function EditorShell({
   // ── Add node from toolbar ─────────────────────────────────────────────────
 
   const handleAddNode = useCallback(
-    (type: "trigger" | "agent" | "step") => {
+    (type: "trigger" | "agent" | "step" | "connection") => {
       const id = crypto.randomUUID();
       const position = { x: 400, y: 200 };
       const schemaNode = makeDefaultNode(type, id, position);

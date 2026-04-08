@@ -7,7 +7,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
-import type { ProgramSchema, AgentConfig, StepConfig, TriggerConfig, BranchCondition } from "@flowos/schema";
+import type {
+  ProgramSchema,
+  AgentConfig,
+  StepConfig,
+  TriggerConfig,
+  BranchCondition,
+  ConnectionConfig,
+  HttpConnectionConfig,
+  RetryConfig,
+} from "@flowos/schema";
 import type { ValidationError, ValidationWarning } from "@/lib/validation";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -179,7 +188,17 @@ function AgentSidebar({
             <Select
               id="agent-apikey"
               value={config.api_key_ref === "__USER_ASSIGNED__" ? "" : config.api_key_ref}
-              onChange={(e) => onUpdate({ api_key_ref: e.target.value || "__USER_ASSIGNED__" })}
+              onChange={(e) => {
+                const keyId = e.target.value || "__USER_ASSIGNED__";
+                const updates: Partial<AgentConfig> = { api_key_ref: keyId };
+                if (config.model === "__USER_ASSIGNED__" && keyId !== "__USER_ASSIGNED__") {
+                  const selectedKey = apiKeys.find((k) => k.id === keyId);
+                  if (selectedKey?.provider === "openrouter") {
+                    updates.model = "nvidia/nemotron-3-super-120b-a12b:free";
+                  }
+                }
+                onUpdate(updates);
+              }}
             >
               <option value="">— Select API Key —</option>
               {apiKeys.map((k) => (
@@ -578,83 +597,390 @@ function StepSidebar({
 
 // ─── Connection Config ────────────────────────────────────────────────────────
 
-function ConnectionSidebar({
-  config,
-  onUpdate,
+function isHttpConnectionConfig(
+  config: ConnectionConfig
+): config is HttpConnectionConfig {
+  return config.connector_type === "http";
+}
+
+function KeyValueListEditor({
+  label,
+  items,
+  onChange,
+  emptyKeyPlaceholder,
+  emptyValuePlaceholder,
 }: {
-  config: { scope_access: "read" | "write" | "read_write"; scope_required: string[] };
-  onUpdate: (patch: Record<string, unknown>) => void;
+  label: string;
+  items: Array<{ key: string; value: string }>;
+  onChange: (next: Array<{ key: string; value: string }>) => void;
+  emptyKeyPlaceholder: string;
+  emptyValuePlaceholder: string;
 }) {
-  const [newScope, setNewScope] = useState("");
-
   return (
-    <div className="space-y-3">
-      <FieldGroup label="Scope access" htmlFor="conn-scope">
-        <Select
-          id="conn-scope"
-          value={config.scope_access}
-          onChange={(e) =>
-            onUpdate({ scope_access: e.target.value as "read" | "write" | "read_write" })
-          }
-        >
-          <option value="read">Read</option>
-          <option value="write">Write</option>
-          <option value="read_write">Read + Write</option>
-        </Select>
-      </FieldGroup>
-
-      <div className="space-y-2">
-        <Label className="text-xs">Required scopes</Label>
-        {config.scope_required.map((scope, i) => (
-          <div key={i} className="flex items-center gap-1.5">
-            <span className="flex-1 rounded-md border border-border bg-muted px-2 py-1 text-xs">
-              {scope}
-            </span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
-              onClick={() => {
-                const next = config.scope_required.filter((_, j) => j !== i);
-                onUpdate({ scope_required: next });
-              }}
-            >
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5">
-                <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
-              </svg>
-            </Button>
-          </div>
-        ))}
-
-        <div className="flex gap-1.5">
+    <div className="space-y-2">
+      <Label className="text-xs">{label}</Label>
+      {items.length === 0 && (
+        <p className="text-[11px] text-muted-foreground">No entries yet.</p>
+      )}
+      {items.map((item, index) => (
+        <div key={index} className="flex items-center gap-1.5">
           <Input
-            placeholder="e.g. gmail.readonly"
-            value={newScope}
-            onChange={(e) => setNewScope(e.target.value)}
+            value={item.key}
+            placeholder={emptyKeyPlaceholder}
             className="text-xs"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && newScope.trim()) {
-                onUpdate({ scope_required: [...config.scope_required, newScope.trim()] });
-                setNewScope("");
-              }
+            onChange={(e) => {
+              const next = [...items];
+              next[index] = { ...next[index], key: e.target.value };
+              onChange(next);
+            }}
+          />
+          <Input
+            value={item.value}
+            placeholder={emptyValuePlaceholder}
+            className="text-xs"
+            onChange={(e) => {
+              const next = [...items];
+              next[index] = { ...next[index], value: e.target.value };
+              onChange(next);
             }}
           />
           <Button
             type="button"
-            variant="outline"
-            size="sm"
-            disabled={!newScope.trim()}
-            onClick={() => {
-              if (!newScope.trim()) return;
-              onUpdate({ scope_required: [...config.scope_required, newScope.trim()] });
-              setNewScope("");
-            }}
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+            onClick={() => onChange(items.filter((_, i) => i !== index))}
           >
-            Add
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              className="h-3.5 w-3.5"
+            >
+              <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
+            </svg>
           </Button>
         </div>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="w-full"
+        onClick={() => onChange([...items, { key: "", value: "" }])}
+      >
+        + Add entry
+      </Button>
+    </div>
+  );
+}
+
+function ConnectionSidebar({
+  config,
+  onUpdate,
+}: {
+  config: ConnectionConfig;
+  onUpdate: (patch: Record<string, unknown>) => void;
+}) {
+  const [newScope, setNewScope] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  if (!isHttpConnectionConfig(config)) {
+    return (
+      <div className="space-y-3">
+        <FieldGroup label="Scope access" htmlFor="conn-scope">
+          <Select
+            id="conn-scope"
+            value={config.scope_access}
+            onChange={(e) =>
+              onUpdate({ scope_access: e.target.value as "read" | "write" | "read_write" })
+            }
+          >
+            <option value="read">Read</option>
+            <option value="write">Write</option>
+            <option value="read_write">Read + Write</option>
+          </Select>
+        </FieldGroup>
+
+        <div className="space-y-2">
+          <Label className="text-xs">Required scopes</Label>
+          {config.scope_required.map((scope, i) => (
+            <div key={i} className="flex items-center gap-1.5">
+              <span className="flex-1 rounded-md border border-border bg-muted px-2 py-1 text-xs">
+                {scope}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                onClick={() => {
+                  const next = config.scope_required.filter((_, j) => j !== i);
+                  onUpdate({ scope_required: next });
+                }}
+              >
+                <svg
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  className="h-3.5 w-3.5"
+                >
+                  <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
+                </svg>
+              </Button>
+            </div>
+          ))}
+
+          <div className="flex gap-1.5">
+            <Input
+              placeholder="e.g. gmail.readonly"
+              value={newScope}
+              onChange={(e) => setNewScope(e.target.value)}
+              className="text-xs"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newScope.trim()) {
+                  onUpdate({ scope_required: [...config.scope_required, newScope.trim()] });
+                  setNewScope("");
+                }
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!newScope.trim()}
+              onClick={() => {
+                if (!newScope.trim()) return;
+                onUpdate({ scope_required: [...config.scope_required, newScope.trim()] });
+                setNewScope("");
+              }}
+            >
+              Add
+            </Button>
+          </div>
+        </div>
       </div>
+    );
+  }
+
+  const retryConfig: RetryConfig =
+    config.retry ?? {
+      max_attempts: 3,
+      backoff: "exponential",
+      backoff_base_seconds: 5,
+      fail_program_on_exhaust: false,
+    };
+
+  return (
+    <div className="space-y-3">
+      <FieldGroup label="Method" htmlFor="http-method">
+        <Select
+          id="http-method"
+          value={config.method}
+          onChange={(e) =>
+            onUpdate({
+              method: e.target.value as HttpConnectionConfig["method"],
+            })
+          }
+        >
+          <option value="GET">GET</option>
+          <option value="POST">POST</option>
+          <option value="PUT">PUT</option>
+          <option value="PATCH">PATCH</option>
+          <option value="DELETE">DELETE</option>
+          <option value="HEAD">HEAD</option>
+          <option value="OPTIONS">OPTIONS</option>
+        </Select>
+      </FieldGroup>
+
+      <FieldGroup label="URL" htmlFor="http-url">
+        <Input
+          id="http-url"
+          placeholder="https://api.example.com/v1/resource"
+          value={config.url}
+          onChange={(e) => onUpdate({ url: e.target.value })}
+        />
+      </FieldGroup>
+
+      <FieldGroup label="Auth type" htmlFor="http-auth-type">
+        <Select
+          id="http-auth-type"
+          value={config.auth_type}
+          onChange={(e) =>
+            onUpdate({
+              auth_type: e.target.value as HttpConnectionConfig["auth_type"],
+              auth_value: e.target.value === "none" ? null : config.auth_value,
+            })
+          }
+        >
+          <option value="none">None</option>
+          <option value="bearer">Bearer token</option>
+          <option value="basic">Basic (username:password)</option>
+          <option value="api_key_header">API key (header)</option>
+          <option value="api_key_query">API key (query param)</option>
+        </Select>
+      </FieldGroup>
+
+      {config.auth_type !== "none" && (
+        <FieldGroup label="Auth value" htmlFor="http-auth-value">
+          <Input
+            id="http-auth-value"
+            placeholder={
+              config.auth_type === "basic"
+                ? "username:password"
+                : "token-or-api-key"
+            }
+            value={config.auth_value ?? ""}
+            onChange={(e) => onUpdate({ auth_value: e.target.value || null })}
+          />
+        </FieldGroup>
+      )}
+
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="w-full"
+        onClick={() => setShowAdvanced((v) => !v)}
+      >
+        {showAdvanced ? "Hide advanced options" : "Show advanced options"}
+      </Button>
+
+      {showAdvanced && (
+        <div className="space-y-3 rounded-md border border-border p-3">
+          <KeyValueListEditor
+            label="Query params"
+            items={config.query_params}
+            onChange={(next) => onUpdate({ query_params: next })}
+            emptyKeyPlaceholder="key"
+            emptyValuePlaceholder="value"
+          />
+
+          <KeyValueListEditor
+            label="Headers"
+            items={config.headers}
+            onChange={(next) => onUpdate({ headers: next })}
+            emptyKeyPlaceholder="Header-Name"
+            emptyValuePlaceholder="Header value"
+          />
+
+          <FieldGroup label="Body" htmlFor="http-body">
+            <Textarea
+              id="http-body"
+              rows={5}
+              placeholder='{"example": "value"}'
+              value={config.body ?? ""}
+              onChange={(e) => onUpdate({ body: e.target.value || null })}
+              className="text-xs font-mono resize-none"
+            />
+          </FieldGroup>
+
+          <Toggle
+            id="http-parse-response"
+            checked={config.parse_response}
+            onChange={(v) => onUpdate({ parse_response: v })}
+            label="Parse response as JSON when possible"
+          />
+
+          <FieldGroup label="Timeout (seconds)" htmlFor="http-timeout">
+            <Input
+              id="http-timeout"
+              type="number"
+              min={1}
+              placeholder="Default: 30"
+              value={config.timeout_seconds ?? ""}
+              onChange={(e) =>
+                onUpdate({
+                  timeout_seconds: e.target.value ? Number(e.target.value) : null,
+                })
+              }
+            />
+          </FieldGroup>
+
+          <Toggle
+            id="http-enable-retry"
+            checked={config.retry !== null}
+            onChange={(enabled) => onUpdate({ retry: enabled ? retryConfig : null })}
+            label="Enable retries"
+          />
+
+          {config.retry !== null && (
+            <div className="space-y-3 rounded-md border border-border p-2.5">
+              <FieldGroup label="Max attempts (1-5)" htmlFor="http-retry-attempts">
+                <Input
+                  id="http-retry-attempts"
+                  type="number"
+                  min={1}
+                  max={5}
+                  value={retryConfig.max_attempts}
+                  onChange={(e) =>
+                    onUpdate({
+                      retry: {
+                        ...retryConfig,
+                        max_attempts: Math.min(5, Math.max(1, Number(e.target.value))),
+                      },
+                    })
+                  }
+                />
+              </FieldGroup>
+
+              <FieldGroup label="Backoff strategy" htmlFor="http-retry-backoff">
+                <Select
+                  id="http-retry-backoff"
+                  value={retryConfig.backoff}
+                  onChange={(e) =>
+                    onUpdate({
+                      retry: {
+                        ...retryConfig,
+                        backoff: e.target.value as RetryConfig["backoff"],
+                      },
+                    })
+                  }
+                >
+                  <option value="none">None</option>
+                  <option value="linear">Linear</option>
+                  <option value="exponential">Exponential</option>
+                </Select>
+              </FieldGroup>
+
+              {retryConfig.backoff !== "none" && (
+                <FieldGroup label="Backoff base seconds" htmlFor="http-retry-base">
+                  <Input
+                    id="http-retry-base"
+                    type="number"
+                    min={0}
+                    value={retryConfig.backoff_base_seconds}
+                    onChange={(e) =>
+                      onUpdate({
+                        retry: {
+                          ...retryConfig,
+                          backoff_base_seconds: Number(e.target.value),
+                        },
+                      })
+                    }
+                  />
+                </FieldGroup>
+              )}
+
+              <Toggle
+                id="http-retry-fail"
+                checked={retryConfig.fail_program_on_exhaust}
+                onChange={(v) =>
+                  onUpdate({
+                    retry: {
+                      ...retryConfig,
+                      fail_program_on_exhaust: v,
+                    },
+                  })
+                }
+                label="Fail program when retries exhausted"
+              />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -791,12 +1117,7 @@ export function NodeSidebar({ nodeId, schema, apiKeys, onUpdate, onClose }: Node
           )}
           {node.type === "connection" && (
             <ConnectionSidebar
-              config={
-                node.config as {
-                  scope_access: "read" | "write" | "read_write";
-                  scope_required: string[];
-                }
-              }
+              config={node.config as ConnectionConfig}
               onUpdate={handleConfigUpdate}
             />
           )}

@@ -4,21 +4,82 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator, Optional
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from db import get_db, update_run
+from db import get_active_cron_workflows, get_db, update_run
 from engine.executor import ExecutionError, ProgramExecutor
 from schema import ProgramSchema, parse_schema
 
 load_dotenv()
 
+scheduler = AsyncIOScheduler()
+
+
+def parse_cron(expression: str) -> dict:
+    """Split a 5-field cron string into APScheduler kwargs."""
+    fields = expression.strip().split()
+    if len(fields) != 5:
+        raise ValueError(f"Expected 5-field cron expression, got: {expression!r}")
+    minute, hour, day, month, day_of_week = fields
+    return {
+        "minute": minute,
+        "hour": hour,
+        "day": day,
+        "month": month,
+        "day_of_week": day_of_week,
+    }
+
+
+async def trigger_workflow(workflow_id: str) -> None:
+    db = get_db()
+    result = db.table("programs").select("*").eq("id", workflow_id).single().execute()
+    program_data = result.data
+    if not program_data:
+        return
+    schema = parse_schema(program_data.get("schema") or {})
+    run_result = (
+        db.table("runs")
+        .insert({
+            "program_id": workflow_id,
+            "triggered_by": "cron",
+            "trigger_payload": None,
+            "status": "running",
+            "started_at": "now()",
+        })
+        .execute()
+    )
+    run_id = run_result.data[0]["id"]
+    user_id = program_data.get("user_id", "")
+    executor = ProgramExecutor(schema, run_id, user_id)
+    try:
+        await executor.execute(None)
+        await update_run(db, run_id, status="completed", completed_at="now()")
+    except ExecutionError as e:
+        await update_run(db, run_id, status="failed", error_message=e.message, completed_at="now()")
+    except Exception as e:
+        await update_run(db, run_id, status="failed", error_message=str(e), completed_at="now()")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    workflows = await get_active_cron_workflows()
+    for w in workflows:
+        try:
+            scheduler.add_job(
+                trigger_workflow,
+                "cron",
+                **parse_cron(w.get("cron_expression", "0 * * * *")),
+                args=[w["id"]],
+            )
+        except ValueError:
+            pass  # Skip workflows with invalid cron expressions
+    scheduler.start()
     yield
+    scheduler.shutdown(wait=False)
 
 
 app = FastAPI(title="FlowOS Runtime", lifespan=lifespan)

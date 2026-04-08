@@ -113,13 +113,48 @@ export interface BranchCondition {
 
 // CONNECTION NODE
 
+export interface KeyValuePair {
+  key: string;
+  value: string;
+}
+
+export interface OAuthConnectionConfig {
+  // Optional for backward compatibility with existing schemas that
+  // predate connector_type.
+  connector_type?: "oauth";
+  scope_access: "read" | "write" | "read_write";
+  scope_required: string[];
+}
+
+export type HttpAuthType =
+  | "none"
+  | "bearer"
+  | "basic"
+  | "api_key_header"
+  | "api_key_query";
+
+export interface HttpConnectionConfig {
+  connector_type: "http";
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS";
+  url: string;
+  auth_type: HttpAuthType;
+  // Token / key / or "username:password" for basic auth.
+  auth_value: string | null;
+  query_params: KeyValuePair[];
+  headers: KeyValuePair[];
+  body: string | null;
+  parse_response: boolean;
+  timeout_seconds: number | null;
+  retry: RetryConfig | null;
+}
+
+export type ConnectionConfig = OAuthConnectionConfig | HttpConnectionConfig;
+
 export interface ConnectionNode extends NodeBase {
   type: "connection";
-  connection: string;
-  config: {
-    scope_access: "read" | "write" | "read_write";
-    scope_required: string[];
-  };
+  // OAuth connectors point to a named connected app; HTTP connectors can be null.
+  connection: string | null;
+  config: ConnectionConfig;
 }
 
 // ─── EDGES ────────────────────────────────────────────────────────────────

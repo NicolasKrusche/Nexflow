@@ -766,6 +766,77 @@ const positionFidelitySchema: ProgramSchema = {
   metadata: BASE_METADATA,
 };
 
+/** 11. HTTP connector node config */
+const httpConnectionSchema: ProgramSchema = {
+  version: "1.0",
+  program_id: "prog-011",
+  program_name: "HTTP Connector",
+  created_at: "2026-04-05T12:00:00.000Z",
+  updated_at: "2026-04-05T12:00:00.000Z",
+  execution_mode: "autonomous",
+  nodes: [
+    {
+      id: "t1",
+      type: "trigger",
+      label: "Manual",
+      description: "",
+      position: { x: 100, y: 100 },
+      status: "idle",
+      connection: null,
+      config: { trigger_type: "manual" },
+    },
+    {
+      id: "c1",
+      type: "connection",
+      label: "Fetch CRM",
+      description: "HTTP call",
+      position: { x: 400, y: 100 },
+      status: "idle",
+      connection: null,
+      config: {
+        connector_type: "http",
+        method: "GET",
+        url: "https://api.example.com/customers",
+        auth_type: "bearer",
+        auth_value: "token-123",
+        query_params: [{ key: "limit", value: "10" }],
+        headers: [{ key: "X-API-Version", value: "2026-04-01" }],
+        body: null,
+        parse_response: true,
+        timeout_seconds: 20,
+        retry: {
+          max_attempts: 3,
+          backoff: "exponential",
+          backoff_base_seconds: 2,
+          fail_program_on_exhaust: false,
+        },
+      },
+    },
+  ],
+  edges: [
+    {
+      id: "e1",
+      from: "t1",
+      to: "c1",
+      type: "data_flow",
+      data_mapping: null,
+      condition: null,
+      label: null,
+    },
+  ],
+  triggers: [
+    {
+      node_id: "t1",
+      type: "manual",
+      is_active: true,
+      last_fired: null,
+      next_scheduled: null,
+    },
+  ],
+  version_history: [],
+  metadata: BASE_METADATA,
+};
+
 // ─── Roundtrip tests ──────────────────────────────────────────────────────────
 
 describe("toReactFlow / fromReactFlow roundtrip", () => {
@@ -854,6 +925,20 @@ describe("toReactFlow / fromReactFlow roundtrip", () => {
     expect(t1?.position).toEqual({ x: 123, y: 456 });
     expect(a1?.position).toEqual({ x: 789, y: 321 });
     expect(schemaEqual(result, positionFidelitySchema)).toBe(true);
+  });
+
+  it("11. preserves HTTP connector config including advanced fields", () => {
+    const result = roundtrip(httpConnectionSchema);
+    const connNode = result.nodes.find((n) => n.id === "c1");
+    expect(connNode?.type).toBe("connection");
+    if (connNode?.type === "connection" && connNode.config.connector_type === "http") {
+      expect(connNode.config.method).toBe("GET");
+      expect(connNode.config.url).toBe("https://api.example.com/customers");
+      expect(connNode.config.query_params).toEqual([{ key: "limit", value: "10" }]);
+      expect(connNode.config.headers).toEqual([{ key: "X-API-Version", value: "2026-04-01" }]);
+      expect(connNode.config.timeout_seconds).toBe(20);
+    }
+    expect(schemaEqual(result, httpConnectionSchema)).toBe(true);
   });
 });
 

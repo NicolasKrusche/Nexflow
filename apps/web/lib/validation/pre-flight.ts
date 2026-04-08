@@ -1,4 +1,9 @@
-import type { ProgramSchema, AgentNode, ConnectionNode } from "@flowos/schema";
+import type {
+  ProgramSchema,
+  AgentNode,
+  ConnectionNode,
+  HttpConnectionConfig,
+} from "@flowos/schema";
 import type { ValidationResult, ValidationError, ValidationWarning, NodeValidationState } from "./index";
 
 // ─── Input types ──────────────────────────────────────────────────────────────
@@ -25,6 +30,12 @@ export interface PreFlightCheck {
   label: string;
   status: "pass" | "fail" | "skip";
   failures: Array<{ node_id: string | null; message: string; fix_suggestion: string }>;
+}
+
+function isHttpConnectionConfig(
+  config: ConnectionNode["config"]
+): config is HttpConnectionConfig {
+  return config.connector_type === "http";
 }
 
 // ─── validatePreFlight ────────────────────────────────────────────────────────
@@ -111,6 +122,7 @@ export async function validatePreFlight(
 
         if (node.type === "connection") {
           const connNode = node as ConnectionNode;
+          if (isHttpConnectionConfig(connNode.config)) continue;
           for (const scope of connNode.config.scope_required ?? []) {
             if (!(conn.scopes ?? []).includes(scope)) {
               const msg = `${node.label} requires the "${scope}" permission but it was not granted`;

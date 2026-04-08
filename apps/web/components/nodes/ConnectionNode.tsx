@@ -5,17 +5,19 @@ import { Handle, Position } from "@xyflow/react";
 import type { NodeProps } from "@xyflow/react";
 import { NodeShell } from "./NodeShell";
 import type { NodeValidationState, ValidationError, ValidationWarning } from "@/lib/validation";
-import type { NodeStatus } from "@flowos/schema";
+import type {
+  NodeStatus,
+  ConnectionConfig,
+  HttpConnectionConfig,
+  OAuthConnectionConfig,
+} from "@flowos/schema";
 
 interface ConnectionNodeData {
   label: string;
   description: string;
-  connection: string;
+  connection: string | null;
   status: NodeStatus;
-  config: {
-    scope_access: "read" | "write" | "read_write";
-    scope_required: string[];
-  };
+  config: ConnectionConfig;
   validationState: NodeValidationState;
   errors: ValidationError[];
   warnings: ValidationWarning[];
@@ -27,8 +29,22 @@ const SCOPE_LABEL: Record<string, string> = {
   read_write: "Read + Write",
 };
 
+function isHttpConnectionConfig(
+  config: ConnectionConfig
+): config is HttpConnectionConfig {
+  return config.connector_type === "http";
+}
+
+function isOAuthConnectionConfig(
+  config: ConnectionConfig
+): config is OAuthConnectionConfig {
+  return config.connector_type !== "http";
+}
+
 export function ConnectionNode({ data, selected }: NodeProps) {
   const nodeData = data as unknown as ConnectionNodeData;
+  const httpConfig = isHttpConnectionConfig(nodeData.config) ? nodeData.config : null;
+  const oauthConfig = isOAuthConnectionConfig(nodeData.config) ? nodeData.config : null;
 
   return (
     <>
@@ -48,11 +64,17 @@ export function ConnectionNode({ data, selected }: NodeProps) {
         {/* Type badge */}
         <div className="flex items-center gap-1.5 mb-1">
           <span className="inline-flex items-center rounded-sm bg-slate-500/15 px-1.5 py-0.5 text-[10px] font-medium text-slate-700 dark:text-slate-300 uppercase tracking-wide">
-            Connection
+            {httpConfig ? "HTTP Connector" : "Connection"}
           </span>
-          {nodeData.config?.scope_access && (
+          {httpConfig ? (
             <span className="inline-flex items-center rounded-sm bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 dark:text-slate-300">
-              {SCOPE_LABEL[nodeData.config.scope_access] ?? nodeData.config.scope_access}
+              {httpConfig.method}
+            </span>
+          ) : (
+            <span className="inline-flex items-center rounded-sm bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 dark:text-slate-300">
+              {oauthConfig
+                ? (SCOPE_LABEL[oauthConfig.scope_access] ?? oauthConfig.scope_access)
+                : "Read"}
             </span>
           )}
         </div>
@@ -62,8 +84,13 @@ export function ConnectionNode({ data, selected }: NodeProps) {
           {nodeData.label || "Untitled Connection"}
         </p>
 
-        {/* Connection name */}
-        {nodeData.connection && (
+        {/* HTTP URL or OAuth connection name */}
+        {httpConfig?.url && (
+          <p className="text-[11px] text-muted-foreground truncate">
+            {httpConfig.url}
+          </p>
+        )}
+        {!httpConfig && nodeData.connection && (
           <p className="text-[11px] text-muted-foreground truncate">
             {nodeData.connection}
           </p>

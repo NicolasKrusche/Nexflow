@@ -149,11 +149,28 @@ export const StepNodeZ = NodeBaseZ.extend({
 
 export const ConnectionNodeZ = NodeBaseZ.extend({
   type: z.literal("connection"),
-  connection: z.string().min(1),
-  config: z.object({
-    scope_access: z.enum(["read", "write", "read_write"]),
-    scope_required: z.array(z.string()),
-  }),
+  connection: z.string().nullable(),
+  config: z.union([
+    z.object({
+      // Optional for backward compatibility with older schemas.
+      connector_type: z.literal("oauth").optional(),
+      scope_access: z.enum(["read", "write", "read_write"]),
+      scope_required: z.array(z.string()),
+    }),
+    z.object({
+      connector_type: z.literal("http"),
+      method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]),
+      url: z.string().min(1),
+      auth_type: z.enum(["none", "bearer", "basic", "api_key_header", "api_key_query"]),
+      auth_value: z.string().nullable(),
+      query_params: z.array(z.object({ key: z.string(), value: z.string() })),
+      headers: z.array(z.object({ key: z.string(), value: z.string() })),
+      body: z.string().nullable(),
+      parse_response: z.boolean(),
+      timeout_seconds: z.number().positive().nullable(),
+      retry: RetryConfigZ.nullable(),
+    }),
+  ]),
 });
 
 // ─── NODES UNION ──────────────────────────────────────────────────────────

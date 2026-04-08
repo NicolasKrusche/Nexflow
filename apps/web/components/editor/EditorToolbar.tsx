@@ -22,7 +22,7 @@ interface EditorToolbarProps {
   onValidate: () => void;
   onRun: () => void;
   onBack: () => void;
-  onAddNode: (type: "trigger" | "agent" | "step") => void;
+  onAddNode: (type: "trigger" | "agent" | "step" | "connection") => void;
   onHistory: () => void;
 }
 
@@ -180,6 +180,14 @@ export function EditorToolbar({
           className="gap-1 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-950/30"
         >
           <span className="text-[10px]">+</span> Step
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onAddNode("connection")}
+          className="gap-1 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-900/40"
+        >
+          <span className="text-[10px]">+</span> HTTP
         </Button>
       </div>
 
