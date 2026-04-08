@@ -323,6 +323,27 @@ function normalizeSchema(raw: unknown): void {
         normalizeDataSchema(cfg.pass_schema);
       }
 
+      // Normalize connection node config
+      if (n.type === "connection" && n.config && typeof n.config === "object") {
+        const cfg = n.config as Record<string, unknown>;
+        // If model set connector_type to something other than "http", strip it so the
+        // OAuth union branch matches (connector_type is optional there).
+        if (cfg.connector_type && cfg.connector_type !== "http") {
+          delete cfg.connector_type;
+        }
+        // Ensure scope_required is an array (models sometimes emit a string)
+        if (typeof cfg.scope_required === "string") {
+          cfg.scope_required = [cfg.scope_required];
+        } else if (!Array.isArray(cfg.scope_required)) {
+          cfg.scope_required = [];
+        }
+        // Strip empty operation/operation_params so optional fields are truly absent
+        if (cfg.operation === "" || cfg.operation === null) delete cfg.operation;
+        if (cfg.operation_params === null || (typeof cfg.operation_params === "object" && Object.keys(cfg.operation_params as object).length === 0)) {
+          delete cfg.operation_params;
+        }
+      }
+
       // Ensure status is always "idle"
       if (!n.status) n.status = "idle";
     }

@@ -93,7 +93,11 @@
       "Bash(python -m uvicorn main:app --host 0.0.0.0 --port 8000)",
       "Bash(taskkill /PID 15908 /F)",
       "Bash(powershell -Command \"Stop-Process -Id 15908 -Force\")",
-      "Bash(npx vitest:*)"
+      "Bash(npx vitest:*)",
+      "Bash(find /h/Archon/ARCHON_1/apps -type f -name *ConnectionNode* -o -name *StepNode*)",
+      "Bash(grep -E \"\\\\.\\(tsx|ts\\)$\")",
+      "Bash(find /h/Archon/ARCHON_1/packages -type f -name *.ts)",
+      "Bash(grep -r \"supported_operations\\\\|operation_params\" /h/Archon/ARCHON_1/apps/web --include=*.tsx --include=*.ts)"
     ]
   }
 }

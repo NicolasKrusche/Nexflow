@@ -2065,20 +2065,20 @@ interface IConnector {
 
 ### Week 16 — Gmail (deepen from Phase 1 stub)
 - [x] OAuth flow complete (scopes: readonly, send, modify)
-- [ ] Full operation set: read_email, send_email, list_threads, search, label, archive ← not yet
-- [ ] Push notifications via Gmail watch API ← not yet
-- [ ] Attachment handling ← not yet
-- [ ] Rate limiting wrapper ← not yet
+- [x] Full operation set: read_email, send_email, list_threads, search, label, archive
+- [x] Push notifications via Gmail watch API (`/api/connections/[id]/watch`, `/api/webhooks/gmail`)
+- [x] Attachment handling (`get_attachment` operation)
+- [x] Rate limiting wrapper (`rate_limit.py` with 429 retry)
 
 ### Week 17 — Notion
 - [x] OAuth flow + token storage (Basic auth token exchange)
-- [ ] Operations: read_page, append_to_page, create_page, create_database_entry, query_database ← not yet
+- [x] Operations: read_page, append_to_page, create_page, create_database_entry, query_database
 
 ### Week 18 — Slack + GitHub
 - [x] **Slack:** OAuth flow complete
-- [ ] **Slack:** send_message, read_channel, create_channel, Event API webhooks ← not yet
+- [x] **Slack:** send_message, read_channel, list_channels, create_channel, Event API webhooks (`/api/webhooks/slack` with HMAC-SHA256 + url_verification)
 - [x] **GitHub:** OAuth flow complete
-- [ ] **GitHub:** create_issue, comment, list_prs, push_file, webhook events ← not yet
+- [x] **GitHub:** create_issue, comment_on_issue, list_prs, get_pr_diff, push_file, webhook events (`/api/webhooks/github` with SHA256 signature)
 
 ### Week 18b — Additional OAuth flows (added beyond original plan)
 - [x] Airtable OAuth (PKCE flow)
@@ -2090,8 +2090,8 @@ interface IConnector {
 
 ### Week 19 — Google Sheets
 - [x] OAuth (shares Google consent screen — single handler for all Google services)
-- [ ] Operations: read_range, write_range, append_row, create_sheet, clear_range
-- [ ] Change detection via Sheets push notifications
+- [x] Operations: read_range, write_range, append_row, create_sheet, clear_range
+- [x] Change detection via Sheets push notifications (`/api/connections/[id]/watch`, `/api/webhooks/sheets`)
 
 **Milestone:** 5 connectors fully operational, all integrated with connection manager.
 

@@ -141,6 +141,23 @@ export async function dispatchEventTriggers(
         .update({ last_fired_at: new Date().toISOString() } as never)
         .eq("id", trigger.id);
 
+      // Fetch the program's linked connections to give the runtime a name→id map,
+      // so connection nodes can resolve their name references to UUIDs at execution time.
+      const { data: linkedConnsRaw } = await db
+        .from("program_connections")
+        .select("connection_id, connections(id, name)")
+        .eq("program_id", trigger.program_id);
+
+      const connectionNameToId: Record<string, string> = {};
+      for (const row of (linkedConnsRaw ?? []) as Array<{
+        connection_id: string;
+        connections: { id: string; name: string } | null;
+      }>) {
+        if (row.connections) {
+          connectionNameToId[row.connections.name] = row.connections.id;
+        }
+      }
+
       fetch(`${runtimeUrl}/execute`, {
         method: "POST",
         headers: {
@@ -154,6 +171,7 @@ export async function dispatchEventTriggers(
           schema: program.schema,
           triggered_by: triggeredBy,
           trigger_payload: triggerPayload,
+          connections: connectionNameToId,
         }),
       }).catch(() => {});
     })

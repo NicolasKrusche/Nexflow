@@ -106,6 +106,7 @@ class ProgramExecutor:
         user_id: str,
         execution_mode: str = "autonomous",
         conflict_policy: str = "queue",
+        connection_name_to_id: dict[str, str] | None = None,
     ) -> None:
         self.schema = schema
         self.run_id = run_id
@@ -117,6 +118,8 @@ class ProgramExecutor:
         self.edges_from: dict[str, list] = {}
         for edge in schema.edges:
             self.edges_from.setdefault(edge.from_node, []).append(edge)
+        # Maps connection name → UUID. Populated from the run request; falls back to DB lookup.
+        self._connection_name_to_id: dict[str, str] = dict(connection_name_to_id or {})
 
     async def execute(self, trigger_payload: dict | None = None) -> dict[str, Any]:
         """Run the program. Returns final state."""
@@ -400,9 +403,10 @@ class ProgramExecutor:
                 node.id,
             )
         if isinstance(cfg, OAuthConnectionConfig):
-            connection_id = node.connection
-            if not connection_id:
-                raise ExecutionError("OAUTH_CONFIG_INVALID", "OAuth connection node has no connection_id")
+            connection_name = node.connection
+            if not connection_name:
+                raise ExecutionError("OAUTH_CONFIG_INVALID", "OAuth connection node has no connection reference")
+            connection_id = self._resolve_connection_id(connection_name)
             access_token = await self._fetch_oauth_token(connection_id)
 
             # If the node specifies a native operation, dispatch to the connector.
@@ -411,10 +415,14 @@ class ProgramExecutor:
                 if connector is None:
                     raise ExecutionError(
                         "CONNECTOR_NOT_FOUND",
-                        f"No native connector found for connection {connection_id}",
+                        f"No native connector found for connection '{connection_name}'",
                     )
                 try:
-                    result = await connector.execute(cfg.operation, cfg.operation_params, access_token)
+                    result = await connector.execute(
+                        cfg.operation,
+                        cfg.operation_params or {},
+                        access_token,
+                    )
                 except ConnectorError as exc:
                     raise ExecutionError(exc.code, exc.message) from exc
                 return {**input_data, **result, "connection_id": connection_id}
@@ -647,8 +655,34 @@ class ProgramExecutor:
                 raise ConflictError(resource_id)
             # For queue/skip, we just proceed (best-effort locking for MVP)
 
+    def _resolve_connection_id(self, connection_name: str) -> str:
+        """Resolve a connection name (from node.connection) to its UUID.
+
+        Uses the name→id map supplied at construction time; falls back to a DB
+        lookup keyed by (user_id, name) for cron-triggered runs where the map
+        is not available.
+        """
+        if conn_id := self._connection_name_to_id.get(connection_name):
+            return conn_id
+        result = (
+            self.db.table("connections")
+            .select("id")
+            .eq("name", connection_name)
+            .eq("user_id", self.user_id)
+            .limit(1)
+            .execute()
+        )
+        if not result.data:
+            raise ExecutionError(
+                "CONNECTION_NOT_FOUND",
+                f"Connection '{connection_name}' not found for this user",
+            )
+        conn_id = str(result.data[0]["id"])
+        self._connection_name_to_id[connection_name] = conn_id  # cache
+        return conn_id
+
     def _provider_for_connection(self, connection_id: str) -> str:
-        """Look up the provider slug for a connection from the DB."""
+        """Look up the provider slug for a connection UUID from the DB."""
         result = (
             self.db.table("connections")
             .select("provider")

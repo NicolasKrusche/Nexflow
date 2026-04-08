@@ -124,6 +124,7 @@ export async function POST(request: Request) {
         user_id: user.id,
         schema,
         triggered_by: "manual",
+        connections: Object.fromEntries(connections.map((c) => [c.name, c.id])),
       }),
     });
     if (!runtimeRes.ok) {

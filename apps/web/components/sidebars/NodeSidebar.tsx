@@ -28,14 +28,33 @@ export interface ApiKey {
   provider: string;
 }
 
+export interface SidebarConnection {
+  name: string;
+  provider: string;
+  scopes: string[];
+}
+
 interface NodeSidebarProps {
   nodeId: string;
   schema: ProgramSchema;
   apiKeys: ApiKey[];
+  connections: SidebarConnection[];
   onUpdate: (nodeId: string, config: Record<string, unknown>) => void;
   onClose: () => void;
   onDelete: (nodeId: string) => void;
 }
+
+// Supported operations per provider — mirrors apps/runtime/connectors/
+const CONNECTOR_OPERATIONS: Record<string, string[]> = {
+  gmail:   ["list_emails", "list_threads", "search", "read_email", "get_attachment", "send_email", "archive_email", "label_email"],
+  notion:  ["read_page", "create_page", "append_to_page", "query_database", "create_database_entry"],
+  slack:   ["send_message", "read_channel", "list_channels", "create_channel"],
+  github:  ["create_issue", "comment_on_issue", "list_prs", "get_pr_diff", "push_file"],
+  sheets:  ["read_range", "write_range", "append_row", "list_sheets", "clear_range"],
+  calendar: [],
+  docs:    [],
+  drive:   [],
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -680,21 +699,119 @@ function KeyValueListEditor({
 
 function ConnectionSidebar({
   config,
+  nodeConnection,
+  availableConnections,
   onUpdate,
 }: {
   config: ConnectionConfig;
+  nodeConnection: string | null;
+  availableConnections: SidebarConnection[];
   onUpdate: (patch: Record<string, unknown>) => void;
 }) {
   const [newScope, setNewScope] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [paramsText, setParamsText] = useState(
+    () => JSON.stringify((config as { operation_params?: unknown }).operation_params ?? {}, null, 2)
+  );
+  const [paramsError, setParamsError] = useState(false);
 
   if (!isHttpConnectionConfig(config)) {
+    const oauthConfig = config as {
+      scope_access: "read" | "write" | "read_write";
+      scope_required: string[];
+      operation?: string;
+      operation_params?: Record<string, unknown>;
+    };
+
+    const selectedProvider = availableConnections.find((c) => c.name === nodeConnection)?.provider ?? "";
+    const supportedOps = CONNECTOR_OPERATIONS[selectedProvider] ?? [];
+
+    function handleConnectionChange(name: string) {
+      const newProvider = availableConnections.find((c) => c.name === name)?.provider ?? "";
+      const oldProvider = selectedProvider;
+      const patch: Record<string, unknown> = { connection: name };
+      // Clear operation if the provider changes
+      if (newProvider !== oldProvider) {
+        patch.operation = undefined;
+        patch.operation_params = undefined;
+        setParamsText("{}");
+      }
+      onUpdate(patch);
+    }
+
+    function handleParamsBlur() {
+      try {
+        const parsed = JSON.parse(paramsText);
+        setParamsError(false);
+        onUpdate({ operation_params: parsed });
+      } catch {
+        setParamsError(true);
+      }
+    }
+
     return (
       <div className="space-y-3">
+        {/* Connection selector */}
+        {availableConnections.length > 0 && (
+          <FieldGroup label="Connection" htmlFor="conn-select">
+            <Select
+              id="conn-select"
+              value={nodeConnection ?? ""}
+              onChange={(e) => handleConnectionChange(e.target.value)}
+            >
+              <option value="">— none —</option>
+              {availableConnections.map((c) => (
+                <option key={c.name} value={c.name}>
+                  {c.name} ({c.provider})
+                </option>
+              ))}
+            </Select>
+          </FieldGroup>
+        )}
+
+        {/* Operation picker — only shown when the provider has known operations */}
+        {supportedOps.length > 0 && (
+          <FieldGroup label="Operation" htmlFor="conn-op">
+            <Select
+              id="conn-op"
+              value={oauthConfig.operation ?? ""}
+              onChange={(e) =>
+                onUpdate({ operation: e.target.value || undefined, operation_params: undefined })
+              }
+            >
+              <option value="">— none (pass token downstream) —</option>
+              {supportedOps.map((op) => (
+                <option key={op} value={op}>{op}</option>
+              ))}
+            </Select>
+          </FieldGroup>
+        )}
+
+        {/* Operation params — shown when an operation is selected */}
+        {oauthConfig.operation && (
+          <FieldGroup label="Operation params (JSON)" htmlFor="conn-op-params">
+            <Textarea
+              id="conn-op-params"
+              rows={5}
+              className={`text-xs font-mono resize-y ${paramsError ? "border-destructive" : ""}`}
+              value={paramsText}
+              onChange={(e) => setParamsText(e.target.value)}
+              onBlur={handleParamsBlur}
+              placeholder='{}'
+            />
+            {paramsError && (
+              <p className="text-xs text-destructive mt-0.5">Invalid JSON</p>
+            )}
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Use <span className="font-mono">{"{{node_id.field}}"}</span> to reference upstream outputs.
+            </p>
+          </FieldGroup>
+        )}
+
         <FieldGroup label="Scope access" htmlFor="conn-scope">
           <Select
             id="conn-scope"
-            value={config.scope_access}
+            value={oauthConfig.scope_access}
             onChange={(e) =>
               onUpdate({ scope_access: e.target.value as "read" | "write" | "read_write" })
             }
@@ -707,7 +824,7 @@ function ConnectionSidebar({
 
         <div className="space-y-2">
           <Label className="text-xs">Required scopes</Label>
-          {config.scope_required.map((scope, i) => (
+          {oauthConfig.scope_required.map((scope, i) => (
             <div key={i} className="flex items-center gap-1.5">
               <span className="flex-1 rounded-md border border-border bg-muted px-2 py-1 text-xs">
                 {scope}
@@ -718,7 +835,7 @@ function ConnectionSidebar({
                 size="icon"
                 className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
                 onClick={() => {
-                  const next = config.scope_required.filter((_, j) => j !== i);
+                  const next = oauthConfig.scope_required.filter((_, j) => j !== i);
                   onUpdate({ scope_required: next });
                 }}
               >
@@ -743,7 +860,7 @@ function ConnectionSidebar({
               className="text-xs"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && newScope.trim()) {
-                  onUpdate({ scope_required: [...config.scope_required, newScope.trim()] });
+                  onUpdate({ scope_required: [...oauthConfig.scope_required, newScope.trim()] });
                   setNewScope("");
                 }
               }}
@@ -755,7 +872,7 @@ function ConnectionSidebar({
               disabled={!newScope.trim()}
               onClick={() => {
                 if (!newScope.trim()) return;
-                onUpdate({ scope_required: [...config.scope_required, newScope.trim()] });
+                onUpdate({ scope_required: [...oauthConfig.scope_required, newScope.trim()] });
                 setNewScope("");
               }}
             >
@@ -989,7 +1106,7 @@ function ConnectionSidebar({
 
 // ─── NodeSidebar ──────────────────────────────────────────────────────────────
 
-export function NodeSidebar({ nodeId, schema, apiKeys, onUpdate, onClose, onDelete }: NodeSidebarProps) {
+export function NodeSidebar({ nodeId, schema, apiKeys, connections, onUpdate, onClose, onDelete }: NodeSidebarProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const node = schema.nodes.find((n) => n.id === nodeId);
 
@@ -1121,6 +1238,8 @@ export function NodeSidebar({ nodeId, schema, apiKeys, onUpdate, onClose, onDele
           {node.type === "connection" && (
             <ConnectionSidebar
               config={node.config as ConnectionConfig}
+              nodeConnection={node.connection}
+              availableConnections={connections}
               onUpdate={handleConfigUpdate}
             />
           )}

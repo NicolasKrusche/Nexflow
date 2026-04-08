@@ -544,16 +544,17 @@ export function EditorShell({
 
   const handleSidebarUpdate = useCallback(
     (nodeId: string, config: Record<string, unknown>) => {
-      // Separate label/description from config fields
-      const { label, description, ...configPatch } = config;
+      // Separate top-level node fields from config fields
+      const { label, description, connection, ...configPatch } = config;
 
-      if (label !== undefined || description !== undefined) {
+      if (label !== undefined || description !== undefined || connection !== undefined) {
         dispatch({
           type: "UPDATE_NODE",
           nodeId,
           patch: {
             ...(label !== undefined ? { label: label as string } : {}),
             ...(description !== undefined ? { description: description as string } : {}),
+            ...(connection !== undefined ? { connection: connection as string | null } : {}),
           },
         });
       }
@@ -699,6 +700,7 @@ export function EditorShell({
             nodeId={state.selectedNodeId}
             schema={state.schema}
             apiKeys={apiKeys}
+            connections={linkedConnections}
             onUpdate={handleSidebarUpdate}
             onClose={() => dispatch({ type: "SELECT_NODE", nodeId: null })}
             onDelete={(nodeId) => {

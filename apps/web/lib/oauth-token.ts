@@ -197,8 +197,9 @@ export async function getValidOAuthToken(
     refresh_token: refreshed.refresh_token ?? tokens.refresh_token,
   };
 
-  // Rotate vault entry
-  const vaultName = `oauth:${connection.provider}:refreshed`;
+  // Rotate vault entry — include connectionId so concurrent refreshes for different
+  // connections of the same provider don't overwrite each other's vault label.
+  const vaultName = `oauth:${connectionId}:refreshed`;
   await rotateVaultTokens(supabase, connectionId, connection.vault_secret_id, newTokens, vaultName);
 
   return newTokens.access_token;

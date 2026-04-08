@@ -18,6 +18,7 @@ class SheetsConnector(IConnector):
         "write_range",
         "append_row",
         "list_sheets",
+        "create_sheet",
         "clear_range",
     ]
 
@@ -38,6 +39,8 @@ class SheetsConnector(IConnector):
                     return await self._append_row(client, headers, params)
                 case "list_sheets":
                     return await self._list_sheets(client, headers, params)
+                case "create_sheet":
+                    return await self._create_sheet(client, headers, params)
                 case "clear_range":
                     return await self._clear_range(client, headers, params)
                 case _:
@@ -147,6 +150,40 @@ class SheetsConnector(IConnector):
                 }
                 for s in sheets
             ]
+        }
+
+    async def _create_sheet(
+        self, client: httpx.AsyncClient, headers: dict, params: dict
+    ) -> dict:
+        spreadsheet_id = params.get("spreadsheet_id")
+        title = str(params.get("title", "Sheet1"))
+        if not spreadsheet_id:
+            raise ConnectorError("MISSING_PARAM", "create_sheet requires 'spreadsheet_id'")
+        r = await request_with_rate_limit(
+            client,
+            "POST",
+            f"{_BASE}/{spreadsheet_id}:batchUpdate",
+            headers=headers,
+            json={
+                "requests": [
+                    {
+                        "addSheet": {
+                            "properties": {
+                                "title": title,
+                                **({"index": int(params["index"])} if params.get("index") is not None else {}),
+                            }
+                        }
+                    }
+                ]
+            },
+        )
+        _raise_for_status(r, "create_sheet")
+        reply = r.json().get("replies", [{}])[0]
+        props = reply.get("addSheet", {}).get("properties", {})
+        return {
+            "sheet_id": props.get("sheetId"),
+            "title": props.get("title", title),
+            "index": props.get("index"),
         }
 
     async def _clear_range(

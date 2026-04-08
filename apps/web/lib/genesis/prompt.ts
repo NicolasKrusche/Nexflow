@@ -66,7 +66,24 @@ STEP NODE CONFIG (pick one shape, connection must be null):
 - Branch:    { "logic_type": "branch", "conditions": [{ "condition": "<expr>", "target_node_id": "<id>" }], "default_branch": "<node_id>" }
 
 CONNECTION NODE CONFIG:
-{ "scope_access": "read"|"write"|"read_write", "scope_required": ["<scope_string>"] }
+{
+  "scope_access": "read"|"write"|"read_write",
+  "scope_required": ["<scope_string>"],
+  // Optional: set operation + operation_params when this node should directly execute
+  // an action rather than just surfacing the token to downstream agent nodes.
+  "operation": "<operation_name>",        // omit if not executing an operation
+  "operation_params": { /* key: value */ } // use {{node_id.field}} for upstream data
+}
+
+Supported operations per provider (use exact operation names):
+- gmail:   list_emails, list_threads, search, read_email, get_attachment, send_email, archive_email, label_email
+- notion:  read_page, create_page, append_to_page, query_database, create_database_entry
+- slack:   send_message, read_channel, list_channels, create_channel
+- github:  create_issue, comment_on_issue, list_prs, get_pr_diff, push_file
+- sheets:  read_range, write_range, append_row, list_sheets, clear_range
+
+When to set operation: when the connection node performs a concrete action (e.g. send a Slack message, write to Sheets).
+When to omit operation: when a downstream agent node will use the token itself via {{node_id.access_token}}.
 
 EDGE RULES:
 - Every edge must have: id (e.g. "e1"), from, to, type, data_mapping (null or object), condition (null or string), label (null or string)

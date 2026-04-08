@@ -114,6 +114,9 @@ class ExecuteRequest(BaseModel):
     schema: dict[str, Any]
     trigger_payload: Optional[dict[str, Any]] = None
     triggered_by: str = "manual"
+    # Maps connection name → connection UUID; populated by Next.js for manual/event runs.
+    # Cron-triggered runs omit this and the executor falls back to a DB lookup.
+    connections: dict[str, str] = {}
 
 
 @app.post("/execute")
@@ -125,7 +128,7 @@ async def execute_program(
     verify_runtime_secret(x_runtime_secret)
     schema = parse_schema(body.schema)
     background_tasks.add_task(
-        _run_program, schema, body.run_id, body.user_id, body.trigger_payload
+        _run_program, schema, body.run_id, body.user_id, body.trigger_payload, body.connections
     )
     return {"status": "started", "run_id": body.run_id}
 
@@ -154,11 +157,12 @@ async def _run_program(
     run_id: str,
     user_id: str,
     trigger_payload: Optional[dict[str, Any]],
+    connection_name_to_id: dict[str, str] | None = None,
 ) -> None:
     db = get_db()
     final_status = "failed"
     try:
-        executor = ProgramExecutor(schema, run_id, user_id)
+        executor = ProgramExecutor(schema, run_id, user_id, connection_name_to_id=connection_name_to_id)
         await asyncio.wait_for(executor.execute(trigger_payload), timeout=RUN_TIMEOUT_SECONDS)
         final_status = "completed"
         await update_run(db, run_id, status="completed", completed_at="now()")
