@@ -701,6 +701,7 @@ export function EditorShell({
             schema={state.schema}
             apiKeys={apiKeys}
             connections={linkedConnections}
+            validationResult={state.validationResult}
             onUpdate={handleSidebarUpdate}
             onClose={() => dispatch({ type: "SELECT_NODE", nodeId: null })}
             onDelete={(nodeId) => {

@@ -17,7 +17,7 @@ import type {
   HttpConnectionConfig,
   RetryConfig,
 } from "@flowos/schema";
-import type { ValidationError, ValidationWarning } from "@/lib/validation";
+import type { ValidationResult, ValidationError, ValidationWarning } from "@/lib/validation";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -39,21 +39,411 @@ interface NodeSidebarProps {
   schema: ProgramSchema;
   apiKeys: ApiKey[];
   connections: SidebarConnection[];
+  validationResult?: ValidationResult | null;
   onUpdate: (nodeId: string, config: Record<string, unknown>) => void;
   onClose: () => void;
   onDelete: (nodeId: string) => void;
 }
 
-// Supported operations per provider — mirrors apps/runtime/connectors/
+// ─── Operations catalog — exact match with runtime connectors ─────────────────
+
 const CONNECTOR_OPERATIONS: Record<string, string[]> = {
-  gmail:   ["list_emails", "list_threads", "search", "read_email", "get_attachment", "send_email", "archive_email", "label_email"],
-  notion:  ["read_page", "create_page", "append_to_page", "query_database", "create_database_entry"],
-  slack:   ["send_message", "read_channel", "list_channels", "create_channel"],
-  github:  ["create_issue", "comment_on_issue", "list_prs", "get_pr_diff", "push_file"],
-  sheets:  ["read_range", "write_range", "append_row", "list_sheets", "clear_range"],
-  calendar: [],
-  docs:    [],
-  drive:   [],
+  // ── Implemented connectors ──────────────────────────────────────────────────
+  gmail:    ["list_emails", "list_threads", "search", "read_email", "get_attachment", "send_email", "archive_email", "label_email"],
+  notion:   ["read_page", "create_page", "append_to_page", "query_database", "create_database_entry"],
+  slack:    ["send_message", "read_channel", "list_channels", "create_channel"],
+  github:   ["create_issue", "comment_on_issue", "list_prs", "get_pr_diff", "push_file"],
+  sheets:   ["read_range", "write_range", "append_row", "list_sheets", "create_sheet", "clear_range"],
+  // ── Connectors planned (operations will work once connector is added) ────────
+  calendar: ["list_events", "create_event", "update_event", "delete_event"],
+  docs:     ["read_document", "create_document", "append_to_document", "replace_text"],
+  drive:    ["list_files", "get_file_metadata", "create_folder", "delete_file", "share_file"],
+  airtable: ["list_records", "get_record", "create_record", "update_record", "delete_record"],
+  hubspot:  ["list_contacts", "get_contact", "create_contact", "update_contact", "list_deals", "create_deal"],
+  typeform: ["list_forms", "get_form", "list_responses", "get_response"],
+  asana:    ["list_tasks", "get_task", "create_task", "update_task", "list_projects"],
+  outlook:  ["list_emails", "read_email", "send_email", "reply_email", "delete_email"],
+};
+
+// ─── Structured param schemas per provider+operation ──────────────────────────
+
+type ParamFieldType = "string" | "text" | "number" | "boolean" | "json" | "array";
+
+interface ParamField {
+  key: string;
+  label: string;
+  type: ParamFieldType;
+  placeholder?: string;
+  required?: boolean;
+  hint?: string;
+}
+
+const OPERATION_PARAM_FIELDS: Record<string, Record<string, ParamField[]>> = {
+  gmail: {
+    list_emails: [
+      { key: "query", label: "Query", type: "string", placeholder: "from:user@example.com is:unread" },
+      { key: "max_results", label: "Max results", type: "number", placeholder: "10" },
+      { key: "label_ids", label: "Label IDs", type: "array", placeholder: "INBOX, UNREAD" },
+    ],
+    list_threads: [
+      { key: "query", label: "Query", type: "string", placeholder: "subject:invoice" },
+      { key: "max_results", label: "Max results", type: "number", placeholder: "10" },
+    ],
+    search: [
+      { key: "query", label: "Search query", type: "string", placeholder: "has:attachment newer_than:7d", required: true },
+      { key: "max_results", label: "Max results", type: "number", placeholder: "20" },
+    ],
+    read_email: [
+      { key: "message_id", label: "Message ID", type: "string", placeholder: "18e3f1a2b3c4d5e6", required: true },
+    ],
+    get_attachment: [
+      { key: "message_id", label: "Message ID", type: "string", required: true },
+      { key: "attachment_id", label: "Attachment ID", type: "string", required: true },
+    ],
+    send_email: [
+      { key: "to", label: "To", type: "string", placeholder: "alice@example.com", required: true },
+      { key: "subject", label: "Subject", type: "string", required: true },
+      { key: "body", label: "Body", type: "text", required: true },
+      { key: "cc", label: "CC", type: "string", placeholder: "bob@example.com" },
+      { key: "bcc", label: "BCC", type: "string" },
+      { key: "is_html", label: "HTML body", type: "boolean" },
+    ],
+    archive_email: [
+      { key: "message_id", label: "Message ID", type: "string", required: true },
+    ],
+    label_email: [
+      { key: "message_id", label: "Message ID", type: "string", required: true },
+      { key: "label_ids", label: "Add labels", type: "array", placeholder: "STARRED, Label_123" },
+      { key: "remove_label_ids", label: "Remove labels", type: "array", placeholder: "UNREAD" },
+    ],
+  },
+  notion: {
+    read_page: [
+      { key: "page_id", label: "Page ID", type: "string", placeholder: "a1b2c3d4-...", required: true },
+    ],
+    create_page: [
+      { key: "parent_id", label: "Parent page/DB ID", type: "string", required: true },
+      { key: "title", label: "Title", type: "string", required: true },
+      { key: "content", label: "Initial content (Markdown)", type: "text" },
+    ],
+    append_to_page: [
+      { key: "page_id", label: "Page ID", type: "string", required: true },
+      { key: "content", label: "Content (Markdown)", type: "text", required: true },
+    ],
+    query_database: [
+      { key: "database_id", label: "Database ID", type: "string", required: true },
+      { key: "filter", label: "Filter", type: "json", hint: "Notion filter object" },
+      { key: "sorts", label: "Sorts", type: "json", hint: "Array of sort objects" },
+      { key: "page_size", label: "Page size", type: "number", placeholder: "100" },
+    ],
+    create_database_entry: [
+      { key: "database_id", label: "Database ID", type: "string", required: true },
+      { key: "properties", label: "Properties", type: "json", required: true, hint: "Notion properties object" },
+    ],
+  },
+  slack: {
+    send_message: [
+      { key: "channel", label: "Channel", type: "string", placeholder: "#general or C123ABC", required: true },
+      { key: "text", label: "Message text", type: "text", required: true },
+      { key: "blocks", label: "Block Kit blocks", type: "json", hint: "Optional rich layout blocks" },
+    ],
+    read_channel: [
+      { key: "channel", label: "Channel ID", type: "string", required: true },
+      { key: "limit", label: "Message limit", type: "number", placeholder: "50" },
+    ],
+    list_channels: [
+      { key: "types", label: "Types", type: "string", placeholder: "public_channel,private_channel" },
+      { key: "limit", label: "Limit", type: "number", placeholder: "100" },
+    ],
+    create_channel: [
+      { key: "name", label: "Channel name", type: "string", placeholder: "my-channel", required: true },
+      { key: "is_private", label: "Private channel", type: "boolean" },
+    ],
+  },
+  github: {
+    create_issue: [
+      { key: "owner", label: "Owner", type: "string", placeholder: "octocat", required: true },
+      { key: "repo", label: "Repository", type: "string", placeholder: "my-repo", required: true },
+      { key: "title", label: "Title", type: "string", required: true },
+      { key: "body", label: "Body", type: "text" },
+      { key: "labels", label: "Labels", type: "array", placeholder: "bug, enhancement" },
+    ],
+    comment_on_issue: [
+      { key: "owner", label: "Owner", type: "string", required: true },
+      { key: "repo", label: "Repository", type: "string", required: true },
+      { key: "issue_number", label: "Issue number", type: "number", required: true },
+      { key: "body", label: "Comment body", type: "text", required: true },
+    ],
+    list_prs: [
+      { key: "owner", label: "Owner", type: "string", required: true },
+      { key: "repo", label: "Repository", type: "string", required: true },
+      { key: "state", label: "State", type: "string", placeholder: "open" },
+    ],
+    get_pr_diff: [
+      { key: "owner", label: "Owner", type: "string", required: true },
+      { key: "repo", label: "Repository", type: "string", required: true },
+      { key: "pull_number", label: "PR number", type: "number", required: true },
+    ],
+    push_file: [
+      { key: "owner", label: "Owner", type: "string", required: true },
+      { key: "repo", label: "Repository", type: "string", required: true },
+      { key: "path", label: "File path", type: "string", placeholder: "src/hello.txt", required: true },
+      { key: "content", label: "File content", type: "text", required: true },
+      { key: "message", label: "Commit message", type: "string", required: true },
+      { key: "branch", label: "Branch", type: "string", placeholder: "main" },
+    ],
+  },
+  sheets: {
+    read_range: [
+      { key: "spreadsheet_id", label: "Spreadsheet ID", type: "string", required: true },
+      { key: "range", label: "Range", type: "string", placeholder: "Sheet1!A1:D100", required: true },
+    ],
+    write_range: [
+      { key: "spreadsheet_id", label: "Spreadsheet ID", type: "string", required: true },
+      { key: "range", label: "Range", type: "string", placeholder: "Sheet1!A1", required: true },
+      { key: "values", label: "Values (2D array)", type: "json", required: true, hint: '[[\"a\",\"b\"],[\"c\",\"d\"]]' },
+    ],
+    append_row: [
+      { key: "spreadsheet_id", label: "Spreadsheet ID", type: "string", required: true },
+      { key: "range", label: "Range / sheet name", type: "string", placeholder: "Sheet1", required: true },
+      { key: "values", label: "Row values", type: "json", required: true, hint: '[[\"val1\",\"val2\"]]' },
+    ],
+    list_sheets: [
+      { key: "spreadsheet_id", label: "Spreadsheet ID", type: "string", required: true },
+    ],
+    create_sheet: [
+      { key: "spreadsheet_id", label: "Spreadsheet ID", type: "string", required: true },
+      { key: "title", label: "Sheet title", type: "string", required: true },
+    ],
+    clear_range: [
+      { key: "spreadsheet_id", label: "Spreadsheet ID", type: "string", required: true },
+      { key: "range", label: "Range", type: "string", placeholder: "Sheet1!A1:Z100", required: true },
+    ],
+  },
+  calendar: {
+    list_events: [
+      { key: "calendar_id", label: "Calendar ID", type: "string", placeholder: "primary" },
+      { key: "time_min", label: "From (ISO 8601)", type: "string", placeholder: "2024-01-01T00:00:00Z" },
+      { key: "time_max", label: "To (ISO 8601)", type: "string" },
+      { key: "max_results", label: "Max results", type: "number", placeholder: "10" },
+    ],
+    create_event: [
+      { key: "calendar_id", label: "Calendar ID", type: "string", placeholder: "primary" },
+      { key: "summary", label: "Title", type: "string", required: true },
+      { key: "start", label: "Start (ISO 8601)", type: "string", required: true },
+      { key: "end", label: "End (ISO 8601)", type: "string", required: true },
+      { key: "description", label: "Description", type: "text" },
+      { key: "attendees", label: "Attendees", type: "json", hint: '[{"email":"a@b.com"}]' },
+    ],
+    update_event: [
+      { key: "calendar_id", label: "Calendar ID", type: "string", placeholder: "primary" },
+      { key: "event_id", label: "Event ID", type: "string", required: true },
+      { key: "summary", label: "Title", type: "string" },
+      { key: "start", label: "Start (ISO 8601)", type: "string" },
+      { key: "end", label: "End (ISO 8601)", type: "string" },
+    ],
+    delete_event: [
+      { key: "calendar_id", label: "Calendar ID", type: "string", placeholder: "primary" },
+      { key: "event_id", label: "Event ID", type: "string", required: true },
+    ],
+  },
+  docs: {
+    read_document: [
+      { key: "document_id", label: "Document ID", type: "string", required: true },
+    ],
+    create_document: [
+      { key: "title", label: "Title", type: "string", required: true },
+      { key: "content", label: "Initial content", type: "text" },
+    ],
+    append_to_document: [
+      { key: "document_id", label: "Document ID", type: "string", required: true },
+      { key: "content", label: "Content to append", type: "text", required: true },
+    ],
+    replace_text: [
+      { key: "document_id", label: "Document ID", type: "string", required: true },
+      { key: "search_text", label: "Search text", type: "string", required: true },
+      { key: "replacement", label: "Replacement text", type: "string", required: true },
+    ],
+  },
+  drive: {
+    list_files: [
+      { key: "query", label: "Query", type: "string", placeholder: "name contains 'report' and trashed=false" },
+      { key: "page_size", label: "Page size", type: "number", placeholder: "20" },
+    ],
+    get_file_metadata: [
+      { key: "file_id", label: "File ID", type: "string", required: true },
+    ],
+    create_folder: [
+      { key: "name", label: "Folder name", type: "string", required: true },
+      { key: "parent_id", label: "Parent folder ID", type: "string" },
+    ],
+    delete_file: [
+      { key: "file_id", label: "File ID", type: "string", required: true },
+    ],
+    share_file: [
+      { key: "file_id", label: "File ID", type: "string", required: true },
+      { key: "email", label: "Share with (email)", type: "string", required: true },
+      { key: "role", label: "Role", type: "string", placeholder: "writer" },
+    ],
+  },
+  airtable: {
+    list_records: [
+      { key: "base_id", label: "Base ID", type: "string", placeholder: "appXXXXXXXX", required: true },
+      { key: "table_name", label: "Table name", type: "string", required: true },
+      { key: "filter_formula", label: "Filter formula", type: "string", placeholder: 'NOT({Status}="Done")' },
+      { key: "max_records", label: "Max records", type: "number", placeholder: "100" },
+    ],
+    get_record: [
+      { key: "base_id", label: "Base ID", type: "string", required: true },
+      { key: "table_name", label: "Table name", type: "string", required: true },
+      { key: "record_id", label: "Record ID", type: "string", required: true },
+    ],
+    create_record: [
+      { key: "base_id", label: "Base ID", type: "string", required: true },
+      { key: "table_name", label: "Table name", type: "string", required: true },
+      { key: "fields", label: "Fields", type: "json", required: true, hint: '{"Name":"Alice","Status":"Active"}' },
+    ],
+    update_record: [
+      { key: "base_id", label: "Base ID", type: "string", required: true },
+      { key: "table_name", label: "Table name", type: "string", required: true },
+      { key: "record_id", label: "Record ID", type: "string", required: true },
+      { key: "fields", label: "Fields to update", type: "json", required: true },
+    ],
+    delete_record: [
+      { key: "base_id", label: "Base ID", type: "string", required: true },
+      { key: "table_name", label: "Table name", type: "string", required: true },
+      { key: "record_id", label: "Record ID", type: "string", required: true },
+    ],
+  },
+  hubspot: {
+    list_contacts: [
+      { key: "limit", label: "Limit", type: "number", placeholder: "100" },
+      { key: "properties", label: "Properties", type: "array", placeholder: "email, firstname, lastname" },
+      { key: "after", label: "After (cursor)", type: "string" },
+    ],
+    get_contact: [
+      { key: "contact_id", label: "Contact ID", type: "string", required: true },
+    ],
+    create_contact: [
+      { key: "properties", label: "Properties", type: "json", required: true, hint: '{"email":"a@b.com","firstname":"Alice"}' },
+    ],
+    update_contact: [
+      { key: "contact_id", label: "Contact ID", type: "string", required: true },
+      { key: "properties", label: "Properties to update", type: "json", required: true },
+    ],
+    list_deals: [
+      { key: "limit", label: "Limit", type: "number", placeholder: "100" },
+      { key: "after", label: "After (cursor)", type: "string" },
+    ],
+    create_deal: [
+      { key: "properties", label: "Properties", type: "json", required: true, hint: '{"dealname":"Big Deal","amount":"10000"}' },
+    ],
+  },
+  typeform: {
+    list_forms: [
+      { key: "page", label: "Page", type: "number", placeholder: "1" },
+      { key: "page_size", label: "Page size", type: "number", placeholder: "10" },
+    ],
+    get_form: [
+      { key: "form_id", label: "Form ID", type: "string", required: true },
+    ],
+    list_responses: [
+      { key: "form_id", label: "Form ID", type: "string", required: true },
+      { key: "page_size", label: "Page size", type: "number", placeholder: "25" },
+      { key: "since", label: "Since (ISO 8601)", type: "string" },
+      { key: "until", label: "Until (ISO 8601)", type: "string" },
+      { key: "completed", label: "Completed only", type: "boolean" },
+    ],
+    get_response: [
+      { key: "form_id", label: "Form ID", type: "string", required: true },
+      { key: "response_id", label: "Response ID", type: "string", required: true },
+    ],
+  },
+  asana: {
+    list_tasks: [
+      { key: "project_id", label: "Project ID", type: "string", required: true },
+      { key: "assignee", label: "Assignee (email or GID)", type: "string" },
+      { key: "completed_since", label: "Completed since (ISO 8601)", type: "string" },
+    ],
+    get_task: [
+      { key: "task_id", label: "Task GID", type: "string", required: true },
+    ],
+    create_task: [
+      { key: "workspace_id", label: "Workspace GID", type: "string", required: true },
+      { key: "name", label: "Task name", type: "string", required: true },
+      { key: "notes", label: "Notes", type: "text" },
+      { key: "due_on", label: "Due date (YYYY-MM-DD)", type: "string" },
+      { key: "assignee", label: "Assignee (email or GID)", type: "string" },
+      { key: "projects", label: "Project GIDs", type: "array" },
+    ],
+    update_task: [
+      { key: "task_id", label: "Task GID", type: "string", required: true },
+      { key: "name", label: "Name", type: "string" },
+      { key: "notes", label: "Notes", type: "text" },
+      { key: "due_on", label: "Due date (YYYY-MM-DD)", type: "string" },
+      { key: "completed", label: "Completed", type: "boolean" },
+    ],
+    list_projects: [
+      { key: "workspace_id", label: "Workspace GID", type: "string", required: true },
+    ],
+  },
+  outlook: {
+    list_emails: [
+      { key: "folder", label: "Folder", type: "string", placeholder: "Inbox" },
+      { key: "top", label: "Max messages", type: "number", placeholder: "20" },
+      { key: "filter", label: "OData filter", type: "string", placeholder: "isRead eq false" },
+    ],
+    read_email: [
+      { key: "message_id", label: "Message ID", type: "string", required: true },
+    ],
+    send_email: [
+      { key: "to", label: "To (email)", type: "string", required: true },
+      { key: "subject", label: "Subject", type: "string", required: true },
+      { key: "body", label: "Body", type: "text", required: true },
+      { key: "cc", label: "CC", type: "string" },
+      { key: "is_html", label: "HTML body", type: "boolean" },
+    ],
+    reply_email: [
+      { key: "message_id", label: "Message ID", type: "string", required: true },
+      { key: "comment", label: "Reply text", type: "text", required: true },
+    ],
+    delete_email: [
+      { key: "message_id", label: "Message ID", type: "string", required: true },
+    ],
+  },
+};
+
+// ─── Cron presets ─────────────────────────────────────────────────────────────
+
+const CRON_PRESETS: { label: string; expression: string }[] = [
+  { label: "Every minute",    expression: "* * * * *" },
+  { label: "Every 5 min",     expression: "*/5 * * * *" },
+  { label: "Every 15 min",    expression: "*/15 * * * *" },
+  { label: "Hourly",          expression: "0 * * * *" },
+  { label: "Daily 8am",       expression: "0 8 * * *" },
+  { label: "Daily midnight",  expression: "0 0 * * *" },
+  { label: "Weekdays 9am",    expression: "0 9 * * 1-5" },
+  { label: "Mon 9am",         expression: "0 9 * * 1" },
+  { label: "Monthly 1st",     expression: "0 0 1 * *" },
+];
+
+// ─── Model presets per provider ───────────────────────────────────────────────
+
+const MODEL_PRESETS: Record<string, string[]> = {
+  anthropic:  ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
+  openai:     ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o3-mini"],
+  openrouter: [
+    "deepseek/deepseek-chat:free",
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "google/gemini-2.0-flash-exp:free",
+    "qwen/qwen-2.5-72b-instruct:free",
+    "anthropic/claude-opus-4-6",
+    "openai/gpt-4o",
+  ],
+  google:     ["gemini-2.0-flash-exp", "gemini-1.5-pro", "gemini-1.5-flash"],
+  groq:       ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
+  mistral:    ["mistral-large-latest", "mistral-small-latest", "open-mixtral-8x22b"],
+  cohere:     ["command-r-plus", "command-r"],
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -72,10 +462,12 @@ function SidebarSection({ title, children }: { title: string; children: React.Re
 function FieldGroup({
   label,
   htmlFor,
+  hint,
   children,
 }: {
   label: string;
   htmlFor?: string;
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -84,6 +476,7 @@ function FieldGroup({
         {label}
       </Label>
       {children}
+      {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
     </div>
   );
 }
@@ -126,7 +519,7 @@ function Toggle({
   );
 }
 
-// ─── Validation Summary ───────────────────────────────────────────────────────
+// ─── Validation summary ───────────────────────────────────────────────────────
 
 function ValidationSummary({
   errors,
@@ -144,7 +537,9 @@ function ValidationSummary({
           className="rounded-md bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 px-3 py-2"
         >
           <p className="text-xs font-medium text-red-700 dark:text-red-400">{e.message}</p>
-          <p className="text-[10px] text-red-600/80 dark:text-red-500 mt-0.5">{e.fix_suggestion}</p>
+          {e.fix_suggestion && (
+            <p className="text-[10px] text-red-600/80 dark:text-red-500 mt-0.5">{e.fix_suggestion}</p>
+          )}
         </div>
       ))}
       {warnings.map((w, i) => (
@@ -153,14 +548,233 @@ function ValidationSummary({
           className="rounded-md bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-800 px-3 py-2"
         >
           <p className="text-xs font-medium text-yellow-700 dark:text-yellow-400">{w.message}</p>
-          <p className="text-[10px] text-yellow-600/80 dark:text-yellow-500 mt-0.5">{w.fix_suggestion}</p>
+          {w.fix_suggestion && (
+            <p className="text-[10px] text-yellow-600/80 dark:text-yellow-500 mt-0.5">{w.fix_suggestion}</p>
+          )}
         </div>
       ))}
     </div>
   );
 }
 
-// ─── Agent Config Tabs ────────────────────────────────────────────────────────
+// ─── Operation params editor ─────────────────────────────────────────────────
+
+function OperationParamsEditor({
+  provider,
+  operation,
+  params,
+  onChange,
+}: {
+  provider: string;
+  operation: string;
+  params: Record<string, unknown>;
+  onChange: (next: Record<string, unknown>) => void;
+}) {
+  const fields = OPERATION_PARAM_FIELDS[provider]?.[operation];
+
+  // JSON fallback state for JSON-type fields and for unknown operations
+  const [jsonFallback, setJsonFallback] = useState(() => JSON.stringify(params, null, 2));
+  const [jsonError, setJsonError] = useState(false);
+
+  // Keep json fallback in sync when operation changes
+  useEffect(() => {
+    setJsonFallback(JSON.stringify(params, null, 2));
+    setJsonError(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [operation]);
+
+  if (!fields) {
+    // Unknown operation — raw JSON editor
+    return (
+      <FieldGroup label="Operation params (JSON)" htmlFor="op-params-raw">
+        <Textarea
+          id="op-params-raw"
+          rows={5}
+          className={cn("text-xs font-mono resize-y", jsonError && "border-destructive")}
+          value={jsonFallback}
+          onChange={(e) => setJsonFallback(e.target.value)}
+          onBlur={() => {
+            try {
+              onChange(JSON.parse(jsonFallback));
+              setJsonError(false);
+            } catch {
+              setJsonError(true);
+            }
+          }}
+          placeholder="{}"
+        />
+        {jsonError && <p className="text-xs text-destructive">Invalid JSON</p>}
+        <p className="text-[11px] text-muted-foreground mt-0.5">
+          Use <span className="font-mono">{"{{node_id.field}}"}</span> to reference upstream outputs.
+        </p>
+      </FieldGroup>
+    );
+  }
+
+  function update(key: string, value: unknown) {
+    const next = { ...params };
+    if (value === "" || value === undefined || value === null) {
+      delete next[key];
+    } else {
+      next[key] = value;
+    }
+    onChange(next);
+  }
+
+  return (
+    <div className="space-y-3">
+      {fields.map((field) => {
+        const rawVal = params[field.key];
+        const labelEl = (
+          <span>
+            {field.label}
+            {field.required && <span className="text-destructive ml-0.5">*</span>}
+          </span>
+        );
+
+        if (field.type === "boolean") {
+          return (
+            <Toggle
+              key={field.key}
+              id={`op-${field.key}`}
+              checked={Boolean(rawVal)}
+              onChange={(v) => update(field.key, v)}
+              label={field.label}
+            />
+          );
+        }
+
+        if (field.type === "text") {
+          return (
+            <FieldGroup key={field.key} htmlFor={`op-${field.key}`} hint={field.hint}>
+              <Label htmlFor={`op-${field.key}`} className="text-xs">{labelEl}</Label>
+              <Textarea
+                id={`op-${field.key}`}
+                rows={3}
+                className="text-xs resize-y"
+                placeholder={field.placeholder}
+                value={String(rawVal ?? "")}
+                onChange={(e) => update(field.key, e.target.value)}
+              />
+            </FieldGroup>
+          );
+        }
+
+        if (field.type === "number") {
+          return (
+            <FieldGroup key={field.key} htmlFor={`op-${field.key}`} hint={field.hint}>
+              <Label htmlFor={`op-${field.key}`} className="text-xs">{labelEl}</Label>
+              <Input
+                id={`op-${field.key}`}
+                type="number"
+                placeholder={field.placeholder}
+                value={rawVal !== undefined ? String(rawVal) : ""}
+                onChange={(e) => update(field.key, e.target.value ? Number(e.target.value) : undefined)}
+              />
+            </FieldGroup>
+          );
+        }
+
+        if (field.type === "array") {
+          const arrVal = Array.isArray(rawVal) ? (rawVal as string[]).join(", ") : String(rawVal ?? "");
+          return (
+            <FieldGroup key={field.key} htmlFor={`op-${field.key}`} hint={field.hint ?? "Comma-separated"}>
+              <Label htmlFor={`op-${field.key}`} className="text-xs">{labelEl}</Label>
+              <Input
+                id={`op-${field.key}`}
+                placeholder={field.placeholder ?? "item1, item2"}
+                value={arrVal}
+                onChange={(e) => {
+                  const v = e.target.value.trim();
+                  update(field.key, v ? v.split(",").map((s) => s.trim()).filter(Boolean) : undefined);
+                }}
+              />
+            </FieldGroup>
+          );
+        }
+
+        if (field.type === "json") {
+          const jsonVal = rawVal !== undefined
+            ? (typeof rawVal === "string" ? rawVal : JSON.stringify(rawVal, null, 2))
+            : "";
+          return (
+            <JsonField
+              key={field.key}
+              fieldKey={field.key}
+              label={labelEl}
+              hint={field.hint}
+              value={jsonVal}
+              onCommit={(v) => {
+                try {
+                  update(field.key, v ? JSON.parse(v) : undefined);
+                } catch {
+                  // keep old value
+                }
+              }}
+            />
+          );
+        }
+
+        // Default: string input
+        return (
+          <FieldGroup key={field.key} htmlFor={`op-${field.key}`} hint={field.hint}>
+            <Label htmlFor={`op-${field.key}`} className="text-xs">{labelEl}</Label>
+            <Input
+              id={`op-${field.key}`}
+              placeholder={field.placeholder}
+              value={String(rawVal ?? "")}
+              onChange={(e) => update(field.key, e.target.value)}
+            />
+          </FieldGroup>
+        );
+      })}
+      <p className="text-[11px] text-muted-foreground pt-1">
+        Use <span className="font-mono text-[11px]">{"{{node_id.field}}"}</span> to reference upstream outputs.
+      </p>
+    </div>
+  );
+}
+
+// Small controlled JSON textarea that tracks local state independently
+function JsonField({
+  fieldKey,
+  label,
+  hint,
+  value,
+  onCommit,
+}: {
+  fieldKey: string;
+  label: React.ReactNode;
+  hint?: string;
+  value: string;
+  onCommit: (v: string) => void;
+}) {
+  const [local, setLocal] = useState(value);
+  const [err, setErr] = useState(false);
+
+  useEffect(() => { setLocal(value); setErr(false); }, [value]);
+
+  return (
+    <FieldGroup htmlFor={`op-${fieldKey}`} hint={hint}>
+      <Label htmlFor={`op-${fieldKey}`} className="text-xs">{label}</Label>
+      <Textarea
+        id={`op-${fieldKey}`}
+        rows={3}
+        className={cn("text-xs font-mono resize-y", err && "border-destructive")}
+        value={local}
+        placeholder="{}"
+        onChange={(e) => { setLocal(e.target.value); setErr(false); }}
+        onBlur={() => {
+          try { JSON.parse(local || "null"); setErr(false); onCommit(local); }
+          catch { setErr(true); }
+        }}
+      />
+      {err && <p className="text-xs text-destructive">Invalid JSON</p>}
+    </FieldGroup>
+  );
+}
+
+// ─── Agent sidebar ────────────────────────────────────────────────────────────
 
 type AgentTab = "model" | "prompt" | "retry";
 
@@ -174,6 +788,10 @@ function AgentSidebar({
   onUpdate: (patch: Partial<AgentConfig>) => void;
 }) {
   const [tab, setTab] = useState<AgentTab>("model");
+
+  const selectedKey = apiKeys.find((k) => k.id === config.api_key_ref);
+  const providerPresets = MODEL_PRESETS[selectedKey?.provider ?? ""] ?? [];
+  const datalistId = "agent-model-presets";
 
   const tabs: { id: AgentTab; label: string }[] = [
     { id: "model", label: "Model" },
@@ -213,10 +831,9 @@ function AgentSidebar({
                 const keyId = e.target.value || "__USER_ASSIGNED__";
                 const updates: Partial<AgentConfig> = { api_key_ref: keyId };
                 if (config.model === "__USER_ASSIGNED__" && keyId !== "__USER_ASSIGNED__") {
-                  const selectedKey = apiKeys.find((k) => k.id === keyId);
-                  if (selectedKey?.provider === "openrouter") {
-                    updates.model = "nvidia/nemotron-3-super-120b-a12b:free";
-                  }
+                  const selected = apiKeys.find((k) => k.id === keyId);
+                  const presets = MODEL_PRESETS[selected?.provider ?? ""] ?? [];
+                  if (presets.length > 0) updates.model = presets[0];
                 }
                 onUpdate(updates);
               }}
@@ -231,17 +848,40 @@ function AgentSidebar({
           </FieldGroup>
 
           <FieldGroup label="Model" htmlFor="agent-model">
+            {providerPresets.length > 0 && (
+              <datalist id={datalistId}>
+                {providerPresets.map((m) => <option key={m} value={m} />)}
+              </datalist>
+            )}
             <Input
               id="agent-model"
-              placeholder="e.g. claude-3-5-sonnet-20241022"
+              list={providerPresets.length > 0 ? datalistId : undefined}
+              placeholder="e.g. claude-opus-4-6"
               value={config.model === "__USER_ASSIGNED__" ? "" : config.model}
-              onChange={(e) =>
-                onUpdate({ model: e.target.value || "__USER_ASSIGNED__" })
-              }
+              onChange={(e) => onUpdate({ model: e.target.value || "__USER_ASSIGNED__" })}
             />
+            {providerPresets.length > 0 && (
+              <div className="flex flex-wrap gap-1 pt-1">
+                {providerPresets.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => onUpdate({ model: m })}
+                    className={cn(
+                      "text-[10px] px-1.5 py-0.5 rounded border transition-colors",
+                      config.model === m
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                    )}
+                  >
+                    {m.split("/").pop()}
+                  </button>
+                ))}
+              </div>
+            )}
           </FieldGroup>
 
-          <FieldGroup label="Scope Access" htmlFor="agent-scope">
+          <FieldGroup label="Scope access" htmlFor="agent-scope">
             <Select
               id="agent-scope"
               value={config.scope_access}
@@ -260,7 +900,7 @@ function AgentSidebar({
       {/* Prompt tab */}
       {tab === "prompt" && (
         <div className="space-y-3">
-          <FieldGroup label="System Prompt" htmlFor="agent-prompt">
+          <FieldGroup label="System prompt" htmlFor="agent-prompt">
             <Textarea
               id="agent-prompt"
               rows={8}
@@ -318,7 +958,7 @@ function AgentSidebar({
               value={config.retry.backoff}
               onChange={(e) =>
                 onUpdate({
-                  retry: { ...config.retry, backoff: e.target.value as "none" | "linear" | "exponential" },
+                  retry: { ...config.retry, backoff: e.target.value as RetryConfig["backoff"] },
                 })
               }
             >
@@ -348,9 +988,7 @@ function AgentSidebar({
             id="retry-fail"
             checked={config.retry.fail_program_on_exhaust}
             onChange={(v) =>
-              onUpdate({
-                retry: { ...config.retry, fail_program_on_exhaust: v },
-              })
+              onUpdate({ retry: { ...config.retry, fail_program_on_exhaust: v } })
             }
             label="Fail program when retries exhausted"
           />
@@ -360,7 +998,7 @@ function AgentSidebar({
   );
 }
 
-// ─── Trigger Config ───────────────────────────────────────────────────────────
+// ─── Trigger sidebar ──────────────────────────────────────────────────────────
 
 function TriggerSidebar({
   config,
@@ -369,6 +1007,8 @@ function TriggerSidebar({
   config: TriggerConfig;
   onUpdate: (patch: Partial<TriggerConfig>) => void;
 }) {
+  const [showPresets, setShowPresets] = useState(false);
+
   return (
     <div className="space-y-3">
       <FieldGroup label="Trigger type" htmlFor="trigger-type">
@@ -377,18 +1017,18 @@ function TriggerSidebar({
           value={config.trigger_type}
           onChange={(e) => {
             const t = e.target.value as TriggerConfig["trigger_type"];
-            if (t === "manual") onUpdate({ trigger_type: "manual" } as TriggerConfig);
-            else if (t === "cron") onUpdate({ trigger_type: "cron", expression: "", timezone: "UTC" } as TriggerConfig);
-            else if (t === "webhook") onUpdate({ trigger_type: "webhook", endpoint_id: "", method: "POST" } as TriggerConfig);
-            else if (t === "event") onUpdate({ trigger_type: "event", source: "", event: "", filter: null } as TriggerConfig);
+            if (t === "manual")         onUpdate({ trigger_type: "manual" } as TriggerConfig);
+            else if (t === "cron")      onUpdate({ trigger_type: "cron", expression: "", timezone: "UTC" } as TriggerConfig);
+            else if (t === "webhook")   onUpdate({ trigger_type: "webhook", endpoint_id: "", method: "POST" } as TriggerConfig);
+            else if (t === "event")     onUpdate({ trigger_type: "event", source: "", event: "", filter: null } as TriggerConfig);
             else if (t === "program_output") onUpdate({ trigger_type: "program_output", source_program_id: "", on_status: ["success"] } as TriggerConfig);
           }}
         >
           <option value="manual">Manual</option>
-          <option value="cron">Cron Schedule</option>
+          <option value="cron">Cron schedule</option>
           <option value="webhook">Webhook</option>
           <option value="event">Event</option>
-          <option value="program_output">Program Output</option>
+          <option value="program_output">Program output</option>
         </Select>
       </FieldGroup>
 
@@ -402,6 +1042,37 @@ function TriggerSidebar({
               onChange={(e) => onUpdate({ ...config, expression: e.target.value })}
             />
           </FieldGroup>
+
+          {/* Presets */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowPresets((v) => !v)}
+              className="text-[11px] text-primary hover:underline"
+            >
+              {showPresets ? "Hide presets" : "Quick presets"}
+            </button>
+            {showPresets && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {CRON_PRESETS.map((p) => (
+                  <button
+                    key={p.expression}
+                    type="button"
+                    onClick={() => onUpdate({ ...config, expression: p.expression })}
+                    className={cn(
+                      "text-[10px] px-1.5 py-0.5 rounded border transition-colors",
+                      config.expression === p.expression
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                    )}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <FieldGroup label="Timezone" htmlFor="cron-tz">
             <Input
               id="cron-tz"
@@ -414,18 +1085,26 @@ function TriggerSidebar({
       )}
 
       {config.trigger_type === "webhook" && (
-        <FieldGroup label="HTTP method" htmlFor="webhook-method">
-          <Select
-            id="webhook-method"
-            value={config.method}
-            onChange={(e) =>
-              onUpdate({ ...config, method: e.target.value as "POST" | "GET" })
-            }
-          >
-            <option value="POST">POST</option>
-            <option value="GET">GET</option>
-          </Select>
-        </FieldGroup>
+        <>
+          <FieldGroup label="HTTP method" htmlFor="webhook-method">
+            <Select
+              id="webhook-method"
+              value={config.method}
+              onChange={(e) =>
+                onUpdate({ ...config, method: e.target.value as "POST" | "GET" })
+              }
+            >
+              <option value="POST">POST</option>
+              <option value="GET">GET</option>
+            </Select>
+          </FieldGroup>
+          {config.endpoint_id && (
+            <div className="rounded-md bg-muted px-3 py-2">
+              <p className="text-[10px] text-muted-foreground">Endpoint ID</p>
+              <p className="text-xs font-mono mt-0.5 break-all">{config.endpoint_id}</p>
+            </div>
+          )}
+        </>
       )}
 
       {config.trigger_type === "event" && (
@@ -450,22 +1129,42 @@ function TriggerSidebar({
       )}
 
       {config.trigger_type === "program_output" && (
-        <FieldGroup label="Source program ID" htmlFor="prog-source">
-          <Input
-            id="prog-source"
-            placeholder="Program UUID"
-            value={config.source_program_id}
-            onChange={(e) => onUpdate({ ...config, source_program_id: e.target.value })}
-          />
-        </FieldGroup>
+        <>
+          <FieldGroup label="Source program ID" htmlFor="prog-source">
+            <Input
+              id="prog-source"
+              placeholder="Program UUID"
+              value={config.source_program_id}
+              onChange={(e) => onUpdate({ ...config, source_program_id: e.target.value })}
+            />
+          </FieldGroup>
+          <div className="space-y-1">
+            <Label className="text-xs">Fire on status</Label>
+            {(["success", "failed", "partial"] as const).map((s) => {
+              const active = config.on_status.includes(s);
+              return (
+                <Toggle
+                  key={s}
+                  id={`on-status-${s}`}
+                  checked={active}
+                  onChange={(v) => {
+                    const next = v
+                      ? [...config.on_status, s]
+                      : config.on_status.filter((x) => x !== s);
+                    onUpdate({ ...config, on_status: next });
+                  }}
+                  label={s.charAt(0).toUpperCase() + s.slice(1)}
+                />
+              );
+            })}
+          </div>
+        </>
       )}
     </div>
   );
 }
 
-// ─── Step Config ──────────────────────────────────────────────────────────────
-
-type StepTab = "logic";
+// ─── Step sidebar ─────────────────────────────────────────────────────────────
 
 function StepSidebar({
   config,
@@ -497,11 +1196,15 @@ function StepSidebar({
       </FieldGroup>
 
       {config.logic_type === "transform" && (
-        <FieldGroup label="Transformation expression" htmlFor="step-transform">
+        <FieldGroup
+          label="Transformation expression"
+          htmlFor="step-transform"
+          hint="JavaScript expression. input = upstream data."
+        >
           <Textarea
             id="step-transform"
-            rows={6}
-            placeholder="e.g. output.data.map(item => ({ id: item.id, name: item.name }))"
+            rows={7}
+            placeholder={"input.data.map(item => ({\n  id: item.id,\n  name: item.title,\n}))"}
             value={config.transformation}
             onChange={(e) => onUpdate({ ...config, transformation: e.target.value })}
             className="text-xs resize-none font-mono"
@@ -510,10 +1213,14 @@ function StepSidebar({
       )}
 
       {config.logic_type === "filter" && (
-        <FieldGroup label="Filter condition" htmlFor="step-filter">
+        <FieldGroup
+          label="Filter condition"
+          htmlFor="step-filter"
+          hint="Returns true to pass, false to stop. input = upstream data."
+        >
           <Input
             id="step-filter"
-            placeholder="e.g. input.status === 'active'"
+            placeholder="input.status === 'active' && input.score > 0.8"
             value={config.condition}
             onChange={(e) => onUpdate({ ...config, condition: e.target.value })}
           />
@@ -565,7 +1272,6 @@ function StepSidebar({
               </div>
             ))}
 
-            {/* Add new condition */}
             <div className="space-y-1.5 pt-1">
               <Input
                 placeholder="New condition expression"
@@ -616,13 +1322,7 @@ function StepSidebar({
   );
 }
 
-// ─── Connection Config ────────────────────────────────────────────────────────
-
-function isHttpConnectionConfig(
-  config: ConnectionConfig
-): config is HttpConnectionConfig {
-  return config.connector_type === "http";
-}
+// ─── KV list editor ───────────────────────────────────────────────────────────
 
 function KeyValueListEditor({
   label,
@@ -672,13 +1372,7 @@ function KeyValueListEditor({
             className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
             onClick={() => onChange(items.filter((_, i) => i !== index))}
           >
-            <svg
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              className="h-3.5 w-3.5"
-            >
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5">
               <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
             </svg>
           </Button>
@@ -697,6 +1391,12 @@ function KeyValueListEditor({
   );
 }
 
+// ─── Connection sidebar ───────────────────────────────────────────────────────
+
+function isHttpConnectionConfig(config: ConnectionConfig): config is HttpConnectionConfig {
+  return config.connector_type === "http";
+}
+
 function ConnectionSidebar({
   config,
   nodeConnection,
@@ -710,10 +1410,6 @@ function ConnectionSidebar({
 }) {
   const [newScope, setNewScope] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [paramsText, setParamsText] = useState(
-    () => JSON.stringify((config as { operation_params?: unknown }).operation_params ?? {}, null, 2)
-  );
-  const [paramsError, setParamsError] = useState(false);
 
   if (!isHttpConnectionConfig(config)) {
     const oauthConfig = config as {
@@ -728,31 +1424,18 @@ function ConnectionSidebar({
 
     function handleConnectionChange(name: string) {
       const newProvider = availableConnections.find((c) => c.name === name)?.provider ?? "";
-      const oldProvider = selectedProvider;
       const patch: Record<string, unknown> = { connection: name };
-      // Clear operation if the provider changes
-      if (newProvider !== oldProvider) {
+      if (newProvider !== selectedProvider) {
         patch.operation = undefined;
         patch.operation_params = undefined;
-        setParamsText("{}");
       }
       onUpdate(patch);
-    }
-
-    function handleParamsBlur() {
-      try {
-        const parsed = JSON.parse(paramsText);
-        setParamsError(false);
-        onUpdate({ operation_params: parsed });
-      } catch {
-        setParamsError(true);
-      }
     }
 
     return (
       <div className="space-y-3">
         {/* Connection selector */}
-        {availableConnections.length > 0 && (
+        {availableConnections.length > 0 ? (
           <FieldGroup label="Connection" htmlFor="conn-select">
             <Select
               id="conn-select"
@@ -767,9 +1450,13 @@ function ConnectionSidebar({
               ))}
             </Select>
           </FieldGroup>
+        ) : (
+          <div className="rounded-md bg-muted px-3 py-2 text-[11px] text-muted-foreground">
+            No connections linked to this program. Add connections on the program detail page.
+          </div>
         )}
 
-        {/* Operation picker — only shown when the provider has known operations */}
+        {/* Operation picker */}
         {supportedOps.length > 0 && (
           <FieldGroup label="Operation" htmlFor="conn-op">
             <Select
@@ -779,7 +1466,7 @@ function ConnectionSidebar({
                 onUpdate({ operation: e.target.value || undefined, operation_params: undefined })
               }
             >
-              <option value="">— none (pass token downstream) —</option>
+              <option value="">— pass token downstream —</option>
               {supportedOps.map((op) => (
                 <option key={op} value={op}>{op}</option>
               ))}
@@ -787,25 +1474,19 @@ function ConnectionSidebar({
           </FieldGroup>
         )}
 
-        {/* Operation params — shown when an operation is selected */}
+        {/* Structured operation params */}
         {oauthConfig.operation && (
-          <FieldGroup label="Operation params (JSON)" htmlFor="conn-op-params">
-            <Textarea
-              id="conn-op-params"
-              rows={5}
-              className={`text-xs font-mono resize-y ${paramsError ? "border-destructive" : ""}`}
-              value={paramsText}
-              onChange={(e) => setParamsText(e.target.value)}
-              onBlur={handleParamsBlur}
-              placeholder='{}'
-            />
-            {paramsError && (
-              <p className="text-xs text-destructive mt-0.5">Invalid JSON</p>
-            )}
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Use <span className="font-mono">{"{{node_id.field}}"}</span> to reference upstream outputs.
+          <div className="rounded-md border border-border p-3 space-y-3">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+              {oauthConfig.operation} params
             </p>
-          </FieldGroup>
+            <OperationParamsEditor
+              provider={selectedProvider}
+              operation={oauthConfig.operation}
+              params={oauthConfig.operation_params ?? {}}
+              onChange={(next) => onUpdate({ operation_params: next })}
+            />
+          </div>
         )}
 
         <FieldGroup label="Scope access" htmlFor="conn-scope">
@@ -835,23 +1516,15 @@ function ConnectionSidebar({
                 size="icon"
                 className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
                 onClick={() => {
-                  const next = oauthConfig.scope_required.filter((_, j) => j !== i);
-                  onUpdate({ scope_required: next });
+                  onUpdate({ scope_required: oauthConfig.scope_required.filter((_, j) => j !== i) });
                 }}
               >
-                <svg
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                  className="h-3.5 w-3.5"
-                >
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5">
                   <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
                 </svg>
               </Button>
             </div>
           ))}
-
           <div className="flex gap-1.5">
             <Input
               placeholder="e.g. gmail.readonly"
@@ -884,13 +1557,13 @@ function ConnectionSidebar({
     );
   }
 
-  const retryConfig: RetryConfig =
-    config.retry ?? {
-      max_attempts: 3,
-      backoff: "exponential",
-      backoff_base_seconds: 5,
-      fail_program_on_exhaust: false,
-    };
+  // ── HTTP connection ──────────────────────────────────────────────────────────
+  const retryConfig: RetryConfig = config.retry ?? {
+    max_attempts: 3,
+    backoff: "exponential",
+    backoff_base_seconds: 5,
+    fail_program_on_exhaust: false,
+  };
 
   return (
     <div className="space-y-3">
@@ -898,19 +1571,11 @@ function ConnectionSidebar({
         <Select
           id="http-method"
           value={config.method}
-          onChange={(e) =>
-            onUpdate({
-              method: e.target.value as HttpConnectionConfig["method"],
-            })
-          }
+          onChange={(e) => onUpdate({ method: e.target.value as HttpConnectionConfig["method"] })}
         >
-          <option value="GET">GET</option>
-          <option value="POST">POST</option>
-          <option value="PUT">PUT</option>
-          <option value="PATCH">PATCH</option>
-          <option value="DELETE">DELETE</option>
-          <option value="HEAD">HEAD</option>
-          <option value="OPTIONS">OPTIONS</option>
+          {["GET","POST","PUT","PATCH","DELETE","HEAD","OPTIONS"].map((m) => (
+            <option key={m} value={m}>{m}</option>
+          ))}
         </Select>
       </FieldGroup>
 
@@ -946,11 +1611,7 @@ function ConnectionSidebar({
         <FieldGroup label="Auth value" htmlFor="http-auth-value">
           <Input
             id="http-auth-value"
-            placeholder={
-              config.auth_type === "basic"
-                ? "username:password"
-                : "token-or-api-key"
-            }
+            placeholder={config.auth_type === "basic" ? "username:password" : "token-or-api-key"}
             value={config.auth_value ?? ""}
             onChange={(e) => onUpdate({ auth_value: e.target.value || null })}
           />
@@ -964,7 +1625,7 @@ function ConnectionSidebar({
         className="w-full"
         onClick={() => setShowAdvanced((v) => !v)}
       >
-        {showAdvanced ? "Hide advanced options" : "Show advanced options"}
+        {showAdvanced ? "Hide advanced" : "Advanced options"}
       </Button>
 
       {showAdvanced && (
@@ -976,7 +1637,6 @@ function ConnectionSidebar({
             emptyKeyPlaceholder="key"
             emptyValuePlaceholder="value"
           />
-
           <KeyValueListEditor
             label="Headers"
             items={config.headers}
@@ -984,7 +1644,6 @@ function ConnectionSidebar({
             emptyKeyPlaceholder="Header-Name"
             emptyValuePlaceholder="Header value"
           />
-
           <FieldGroup label="Body" htmlFor="http-body">
             <Textarea
               id="http-body"
@@ -995,14 +1654,12 @@ function ConnectionSidebar({
               className="text-xs font-mono resize-none"
             />
           </FieldGroup>
-
           <Toggle
             id="http-parse-response"
             checked={config.parse_response}
             onChange={(v) => onUpdate({ parse_response: v })}
-            label="Parse response as JSON when possible"
+            label="Parse response as JSON"
           />
-
           <FieldGroup label="Timeout (seconds)" htmlFor="http-timeout">
             <Input
               id="http-timeout"
@@ -1011,20 +1668,16 @@ function ConnectionSidebar({
               placeholder="Default: 30"
               value={config.timeout_seconds ?? ""}
               onChange={(e) =>
-                onUpdate({
-                  timeout_seconds: e.target.value ? Number(e.target.value) : null,
-                })
+                onUpdate({ timeout_seconds: e.target.value ? Number(e.target.value) : null })
               }
             />
           </FieldGroup>
-
           <Toggle
             id="http-enable-retry"
             checked={config.retry !== null}
             onChange={(enabled) => onUpdate({ retry: enabled ? retryConfig : null })}
             label="Enable retries"
           />
-
           {config.retry !== null && (
             <div className="space-y-3 rounded-md border border-border p-2.5">
               <FieldGroup label="Max attempts (1-5)" htmlFor="http-retry-attempts">
@@ -1035,27 +1688,16 @@ function ConnectionSidebar({
                   max={5}
                   value={retryConfig.max_attempts}
                   onChange={(e) =>
-                    onUpdate({
-                      retry: {
-                        ...retryConfig,
-                        max_attempts: Math.min(5, Math.max(1, Number(e.target.value))),
-                      },
-                    })
+                    onUpdate({ retry: { ...retryConfig, max_attempts: Math.min(5, Math.max(1, Number(e.target.value))) } })
                   }
                 />
               </FieldGroup>
-
               <FieldGroup label="Backoff strategy" htmlFor="http-retry-backoff">
                 <Select
                   id="http-retry-backoff"
                   value={retryConfig.backoff}
                   onChange={(e) =>
-                    onUpdate({
-                      retry: {
-                        ...retryConfig,
-                        backoff: e.target.value as RetryConfig["backoff"],
-                      },
-                    })
+                    onUpdate({ retry: { ...retryConfig, backoff: e.target.value as RetryConfig["backoff"] } })
                   }
                 >
                   <option value="none">None</option>
@@ -1063,7 +1705,6 @@ function ConnectionSidebar({
                   <option value="exponential">Exponential</option>
                 </Select>
               </FieldGroup>
-
               {retryConfig.backoff !== "none" && (
                 <FieldGroup label="Backoff base seconds" htmlFor="http-retry-base">
                   <Input
@@ -1072,28 +1713,15 @@ function ConnectionSidebar({
                     min={0}
                     value={retryConfig.backoff_base_seconds}
                     onChange={(e) =>
-                      onUpdate({
-                        retry: {
-                          ...retryConfig,
-                          backoff_base_seconds: Number(e.target.value),
-                        },
-                      })
+                      onUpdate({ retry: { ...retryConfig, backoff_base_seconds: Number(e.target.value) } })
                     }
                   />
                 </FieldGroup>
               )}
-
               <Toggle
                 id="http-retry-fail"
                 checked={retryConfig.fail_program_on_exhaust}
-                onChange={(v) =>
-                  onUpdate({
-                    retry: {
-                      ...retryConfig,
-                      fail_program_on_exhaust: v,
-                    },
-                  })
-                }
+                onChange={(v) => onUpdate({ retry: { ...retryConfig, fail_program_on_exhaust: v } })}
                 label="Fail program when retries exhausted"
               />
             </div>
@@ -1106,15 +1734,22 @@ function ConnectionSidebar({
 
 // ─── NodeSidebar ──────────────────────────────────────────────────────────────
 
-export function NodeSidebar({ nodeId, schema, apiKeys, connections, onUpdate, onClose, onDelete }: NodeSidebarProps) {
+export function NodeSidebar({
+  nodeId,
+  schema,
+  apiKeys,
+  connections,
+  validationResult,
+  onUpdate,
+  onClose,
+  onDelete,
+}: NodeSidebarProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const node = schema.nodes.find((n) => n.id === nodeId);
 
-  // Track local label/description edits before committing via onUpdate
   const [label, setLabel] = useState(node?.label ?? "");
   const [description, setDescription] = useState(node?.description ?? "");
 
-  // Reset local state when nodeId changes
   useEffect(() => {
     setLabel(node?.label ?? "");
     setDescription(node?.description ?? "");
@@ -1122,10 +1757,9 @@ export function NodeSidebar({ nodeId, schema, apiKeys, connections, onUpdate, on
 
   if (!node) return null;
 
-  const errors = schema.nodes.length > 0
-    ? [] // will be populated from validationResult passed via schema context
-    : [];
-  const warnings: ValidationWarning[] = [];
+  // Filter validation issues to this node only
+  const nodeErrors = validationResult?.errors.filter((e) => e.node_id === nodeId) ?? [];
+  const nodeWarnings = validationResult?.warnings.filter((w) => w.node_id === nodeId) ?? [];
 
   function commitLabel() {
     if (label !== node?.label) onUpdate(nodeId, { label });
@@ -1154,7 +1788,7 @@ export function NodeSidebar({ nodeId, schema, apiKeys, connections, onUpdate, on
         "flex flex-col",
         "transition-transform duration-200"
       )}
-      style={{ top: 56 }} // below toolbar
+      style={{ top: 56 }}
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
@@ -1162,9 +1796,9 @@ export function NodeSidebar({ nodeId, schema, apiKeys, connections, onUpdate, on
           <span
             className={cn(
               "inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide",
-              node.type === "trigger" && "bg-green-500/15 text-green-700 dark:text-green-400",
-              node.type === "agent" && "bg-purple-500/15 text-purple-700 dark:text-purple-400",
-              node.type === "step" && "bg-blue-500/15 text-blue-700 dark:text-blue-400",
+              node.type === "trigger"    && "bg-green-500/15 text-green-700 dark:text-green-400",
+              node.type === "agent"      && "bg-purple-500/15 text-purple-700 dark:text-purple-400",
+              node.type === "step"       && "bg-blue-500/15 text-blue-700 dark:text-blue-400",
               node.type === "connection" && "bg-slate-500/15 text-slate-700 dark:text-slate-300"
             )}
           >
@@ -1188,10 +1822,10 @@ export function NodeSidebar({ nodeId, schema, apiKeys, connections, onUpdate, on
 
       {/* Scrollable body */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        {/* Validation summary (populated from parent via validationResult) */}
-        {/* Parent will pass errors/warnings when available */}
+        {/* Per-node validation */}
+        <ValidationSummary errors={nodeErrors} warnings={nodeWarnings} />
 
-        {/* Label & Description — always shown */}
+        {/* Label & Description */}
         <SidebarSection title="Identity">
           <FieldGroup label="Label" htmlFor="node-label">
             <Input
@@ -1246,7 +1880,7 @@ export function NodeSidebar({ nodeId, schema, apiKeys, connections, onUpdate, on
         </SidebarSection>
       </div>
 
-      {/* Footer — delete node */}
+      {/* Footer — delete */}
       <div className="px-4 py-3 border-t border-border shrink-0">
         <button
           type="button"
