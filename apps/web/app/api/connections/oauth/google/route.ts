@@ -5,6 +5,7 @@ import { apiError } from "@/lib/api";
 const SCOPES_BY_SERVICE: Record<string, string[]> = {
   sheets: [
     "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive.readonly",
     "https://www.googleapis.com/auth/userinfo.email",
   ],
   calendar: [

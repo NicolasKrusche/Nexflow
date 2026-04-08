@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from .base import IConnector, ConnectorError
+from .rate_limit import request_with_rate_limit
 
 _BASE = "https://sheets.googleapis.com/v4/spreadsheets"
 
@@ -52,7 +53,9 @@ class SheetsConnector(IConnector):
         range_ = params.get("range")
         if not spreadsheet_id or not range_:
             raise ConnectorError("MISSING_PARAM", "read_range requires 'spreadsheet_id' and 'range'")
-        r = await client.get(
+        r = await request_with_rate_limit(
+            client,
+            "GET",
             f"{_BASE}/{spreadsheet_id}/values/{range_}",
             headers=headers,
             params={"valueRenderOption": "FORMATTED_VALUE"},
@@ -76,7 +79,9 @@ class SheetsConnector(IConnector):
                 "MISSING_PARAM",
                 "write_range requires 'spreadsheet_id', 'range', and 'values'",
             )
-        r = await client.put(
+        r = await request_with_rate_limit(
+            client,
+            "PUT",
             f"{_BASE}/{spreadsheet_id}/values/{range_}",
             headers=headers,
             params={"valueInputOption": "USER_ENTERED"},
@@ -101,9 +106,10 @@ class SheetsConnector(IConnector):
                 "MISSING_PARAM",
                 "append_row requires 'spreadsheet_id', 'range', and 'values'",
             )
-        # values may be a single row (list) or multiple rows (list of lists)
         rows = values if isinstance(values[0], list) else [values]
-        r = await client.post(
+        r = await request_with_rate_limit(
+            client,
+            "POST",
             f"{_BASE}/{spreadsheet_id}/values/{range_}:append",
             headers=headers,
             params={"valueInputOption": "USER_ENTERED", "insertDataOption": "INSERT_ROWS"},
@@ -123,7 +129,9 @@ class SheetsConnector(IConnector):
         spreadsheet_id = params.get("spreadsheet_id")
         if not spreadsheet_id:
             raise ConnectorError("MISSING_PARAM", "list_sheets requires 'spreadsheet_id'")
-        r = await client.get(
+        r = await request_with_rate_limit(
+            client,
+            "GET",
             f"{_BASE}/{spreadsheet_id}",
             headers=headers,
             params={"fields": "sheets.properties"},
@@ -150,7 +158,9 @@ class SheetsConnector(IConnector):
             raise ConnectorError(
                 "MISSING_PARAM", "clear_range requires 'spreadsheet_id' and 'range'"
             )
-        r = await client.post(
+        r = await request_with_rate_limit(
+            client,
+            "POST",
             f"{_BASE}/{spreadsheet_id}/values/{range_}:clear",
             headers=headers,
         )

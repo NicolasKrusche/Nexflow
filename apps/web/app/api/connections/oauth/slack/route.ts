@@ -5,7 +5,7 @@ import { apiError } from "@/lib/api";
 const SLACK_SCOPES = [
   "channels:read", "channels:history",
   "chat:write", "chat:write.public",
-  "users:read", "files:read",
+  "users:read", "files:read", "app_mentions:read",
 ].join(",");
 
 export async function GET(request: Request) {

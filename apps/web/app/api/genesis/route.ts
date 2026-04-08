@@ -76,7 +76,7 @@ export async function POST(request: Request) {
         system: GENESIS_SYSTEM_PROMPT,
         messages: [{ role: "user", content: buildGenesisUserMessage(description, availableConnections) }],
       });
-      rawText = msg.content[0].type === "text" ? msg.content[0].text : "";
+      rawText = msg.content[0]?.type === "text" ? (msg.content[0] as { type: "text"; text: string }).text : "";
     } else {
       const baseURL = apiKeyRow.provider === "openrouter"
         ? "https://openrouter.ai/api/v1"
@@ -97,7 +97,16 @@ export async function POST(request: Request) {
           { role: "user", content: buildGenesisUserMessage(description, availableConnections) },
         ],
       });
-      rawText = msg.choices[0]?.message?.content ?? "";
+      // Some OpenRouter models return choices=undefined or an empty array on failure
+      if (!msg.choices?.length) {
+        const hint = (msg as unknown as Record<string, unknown>).error;
+        throw new Error(
+          hint
+            ? `OpenRouter error: ${JSON.stringify(hint)}`
+            : `Model returned no choices (model="${model}" may be unavailable or rate-limited)`
+        );
+      }
+      rawText = msg.choices[0].message?.content ?? "";
     }
   } catch (err) {
     return apiError(`Genesis model call failed: ${(err as Error).message}`, 502);

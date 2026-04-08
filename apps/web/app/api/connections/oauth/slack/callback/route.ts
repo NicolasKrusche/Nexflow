@@ -38,6 +38,7 @@ export async function GET(request: Request) {
   if (!tokens.ok) return NextResponse.redirect(`${origin}/connections?error=${tokens.error ?? "slack_error"}`);
 
   const teamName: string = tokens.team?.name ?? "";
+  const teamId: string | null = tokens.team?.id ?? null;
   const botToken: string = tokens.access_token;
 
   const serviceClient = createServiceClient();
@@ -59,8 +60,13 @@ export async function GET(request: Request) {
     provider: "slack",
     auth_type: "oauth",
     vault_secret_id: vaultId,
-    scopes: ["channels:read", "chat:write"],
-    metadata: { team: teamName },
+    scopes: ["channels:read", "channels:history", "chat:write", "app_mentions:read"],
+    metadata: {
+      team: teamName,
+      team_id: teamId,
+      bot_user_id: tokens.bot_user_id ?? null,
+      app_id: tokens.app_id ?? null,
+    },
     is_valid: true,
     last_validated_at: new Date().toISOString(),
   });

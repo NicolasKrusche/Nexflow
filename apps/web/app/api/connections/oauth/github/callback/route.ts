@@ -68,7 +68,12 @@ export async function GET(request: Request) {
     auth_type: "oauth",
     vault_secret_id: vaultId,
     scopes: ["repo", "issues:write", "read:user"],
-    metadata: { login: ghUser.login ?? null, email: ghUser.email ?? null },
+    metadata: {
+      login: ghUser.login ?? null,
+      email: ghUser.email ?? null,
+      github_user_id: ghUser.id ?? null,
+      account_type: ghUser.type ?? null,
+    },
     is_valid: true,
     last_validated_at: new Date().toISOString(),
   });

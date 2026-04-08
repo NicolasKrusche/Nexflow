@@ -73,7 +73,7 @@ export async function GET(request: Request) {
     provider: "gmail",
     auth_type: "oauth",
     vault_secret_id: vaultId,
-    scopes: ["gmail.readonly", "gmail.send"],
+    scopes: ["gmail.readonly", "gmail.modify", "gmail.send"],
     metadata: { email: userInfo.email ?? null },
     is_valid: true,
     last_validated_at: new Date().toISOString(),

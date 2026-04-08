@@ -3,7 +3,7 @@ import { createServiceClient, apiError } from "@/lib/api";
 import { storeOAuthTokens } from "@/lib/oauth-token";
 
 const SCOPES_STORED: Record<string, string[]> = {
-  sheets: ["spreadsheets.readonly", "spreadsheets"],
+  sheets: ["spreadsheets.readonly", "spreadsheets", "drive.readonly"],
   calendar: ["calendar.readonly", "calendar"],
   docs: ["documents.readonly", "documents"],
   drive: ["drive.readonly", "drive"],

@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from .base import IConnector, ConnectorError
+from .rate_limit import request_with_rate_limit
 
 _BASE = "https://api.notion.com/v1"
 _VERSION = "2022-06-28"
@@ -56,11 +57,13 @@ class NotionConnector(IConnector):
         page_id = params.get("page_id")
         if not page_id:
             raise ConnectorError("MISSING_PARAM", "read_page requires 'page_id'")
-        r = await client.get(f"{_BASE}/pages/{page_id}", headers=headers)
+        r = await request_with_rate_limit(client, "GET", f"{_BASE}/pages/{page_id}", headers=headers)
         _raise_for_status(r, "read_page")
         page = r.json()
         # Also fetch page blocks for content
-        blocks_r = await client.get(f"{_BASE}/blocks/{page_id}/children", headers=headers)
+        blocks_r = await request_with_rate_limit(
+            client, "GET", f"{_BASE}/blocks/{page_id}/children", headers=headers
+        )
         blocks = blocks_r.json().get("results", []) if blocks_r.status_code == 200 else []
         return {"page": page, "blocks": blocks}
 
@@ -81,7 +84,9 @@ class NotionConnector(IConnector):
         }
         if params.get("content"):
             body["children"] = _text_to_blocks(str(params["content"]))
-        r = await client.post(f"{_BASE}/pages", headers=headers, json=body)
+        r = await request_with_rate_limit(
+            client, "POST", f"{_BASE}/pages", headers=headers, json=body
+        )
         _raise_for_status(r, "create_page")
         result = r.json()
         return {"page_id": result.get("id"), "url": result.get("url")}
@@ -98,7 +103,9 @@ class NotionConnector(IConnector):
             if isinstance(params.get("blocks"), list)
             else _text_to_blocks(str(content))
         )
-        r = await client.patch(
+        r = await request_with_rate_limit(
+            client,
+            "PATCH",
             f"{_BASE}/blocks/{page_id}/children",
             headers=headers,
             json={"children": blocks},
@@ -119,8 +126,12 @@ class NotionConnector(IConnector):
             body["sorts"] = params["sorts"]
         if params.get("page_size"):
             body["page_size"] = int(params["page_size"])
-        r = await client.post(
-            f"{_BASE}/databases/{database_id}/query", headers=headers, json=body
+        r = await request_with_rate_limit(
+            client,
+            "POST",
+            f"{_BASE}/databases/{database_id}/query",
+            headers=headers,
+            json=body,
         )
         _raise_for_status(r, "query_database")
         data = r.json()
@@ -137,7 +148,9 @@ class NotionConnector(IConnector):
             "parent": {"database_id": database_id},
             "properties": properties,
         }
-        r = await client.post(f"{_BASE}/pages", headers=headers, json=body)
+        r = await request_with_rate_limit(
+            client, "POST", f"{_BASE}/pages", headers=headers, json=body
+        )
         _raise_for_status(r, "create_database_entry")
         result = r.json()
         return {"page_id": result.get("id"), "url": result.get("url")}

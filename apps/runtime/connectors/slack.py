@@ -6,6 +6,7 @@ from typing import Any
 import httpx
 
 from .base import IConnector, ConnectorError
+from .rate_limit import request_with_rate_limit
 
 _BASE = "https://slack.com/api"
 
@@ -55,7 +56,13 @@ class SlackConnector(IConnector):
         body: dict[str, Any] = {"channel": channel, "text": text}
         if params.get("blocks"):
             body["blocks"] = params["blocks"]
-        r = await client.post(f"{_BASE}/chat.postMessage", headers=headers, json=body)
+        r = await request_with_rate_limit(
+            client,
+            "POST",
+            f"{_BASE}/chat.postMessage",
+            headers=headers,
+            json=body,
+        )
         data = _raise_for_status(r, "send_message")
         return {
             "ts": data.get("ts"),
@@ -70,7 +77,9 @@ class SlackConnector(IConnector):
         if not channel:
             raise ConnectorError("MISSING_PARAM", "read_channel requires 'channel'")
         limit = int(params.get("limit", 20))
-        r = await client.get(
+        r = await request_with_rate_limit(
+            client,
+            "GET",
             f"{_BASE}/conversations.history",
             headers=headers,
             params={"channel": channel, "limit": limit},
@@ -82,7 +91,9 @@ class SlackConnector(IConnector):
         self, client: httpx.AsyncClient, headers: dict, params: dict
     ) -> dict:
         limit = int(params.get("limit", 100))
-        r = await client.get(
+        r = await request_with_rate_limit(
+            client,
+            "GET",
             f"{_BASE}/conversations.list",
             headers=headers,
             params={"limit": limit, "exclude_archived": True},
@@ -100,7 +111,9 @@ class SlackConnector(IConnector):
         name = params.get("name")
         if not name:
             raise ConnectorError("MISSING_PARAM", "create_channel requires 'name'")
-        r = await client.post(
+        r = await request_with_rate_limit(
+            client,
+            "POST",
             f"{_BASE}/conversations.create",
             headers=headers,
             json={"name": name, "is_private": bool(params.get("is_private", False))},
