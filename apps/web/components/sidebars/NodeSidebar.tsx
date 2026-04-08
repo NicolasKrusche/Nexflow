@@ -18,6 +18,7 @@ import type {
   RetryConfig,
 } from "@flowos/schema";
 import type { ValidationError, ValidationWarning } from "@/lib/validation";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,6 +34,7 @@ interface NodeSidebarProps {
   apiKeys: ApiKey[];
   onUpdate: (nodeId: string, config: Record<string, unknown>) => void;
   onClose: () => void;
+  onDelete: (nodeId: string) => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -987,7 +989,8 @@ function ConnectionSidebar({
 
 // ─── NodeSidebar ──────────────────────────────────────────────────────────────
 
-export function NodeSidebar({ nodeId, schema, apiKeys, onUpdate, onClose }: NodeSidebarProps) {
+export function NodeSidebar({ nodeId, schema, apiKeys, onUpdate, onClose, onDelete }: NodeSidebarProps) {
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const node = schema.nodes.find((n) => n.id === nodeId);
 
   // Track local label/description edits before committing via onUpdate
@@ -1123,6 +1126,29 @@ export function NodeSidebar({ nodeId, schema, apiKeys, onUpdate, onClose }: Node
           )}
         </SidebarSection>
       </div>
+
+      {/* Footer — delete node */}
+      <div className="px-4 py-3 border-t border-border shrink-0">
+        <button
+          type="button"
+          onClick={() => setDeleteOpen(true)}
+          className="flex items-center gap-2 text-xs text-muted-foreground hover:text-destructive transition-colors w-full"
+        >
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} className="h-3.5 w-3.5 shrink-0">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.5 4h11M5.5 4V2.5a1 1 0 011-1h3a1 1 0 011 1V4m2 0v9a1 1 0 01-1 1h-7a1 1 0 01-1-1V4h9z" />
+          </svg>
+          Delete node
+        </button>
+      </div>
+
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Delete node?"
+        description={`"${node?.label}" and all its connected edges will be removed. You can undo this.`}
+        confirmLabel="Delete"
+        onConfirm={() => { setDeleteOpen(false); onDelete(nodeId); }}
+        onCancel={() => setDeleteOpen(false)}
+      />
     </aside>
   );
 }

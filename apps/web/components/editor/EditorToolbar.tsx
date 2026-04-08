@@ -1,9 +1,10 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { ValidationResult } from "@/lib/validation";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -13,6 +14,7 @@ interface EditorToolbarProps {
   programName: string;
   isDirty: boolean;
   isSaving: boolean;
+  isRunning: boolean;
   canUndo: boolean;
   canRedo: boolean;
   validationResult: ValidationResult | null;
@@ -94,6 +96,7 @@ export function EditorToolbar({
   programName,
   isDirty,
   isSaving,
+  isRunning,
   canUndo,
   canRedo,
   validationResult,
@@ -108,18 +111,28 @@ export function EditorToolbar({
 }: EditorToolbarProps) {
   const hasErrors = validationResult && !validationResult.valid;
   const isValid = validationResult?.valid === true;
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
 
   function handleBack() {
     if (isDirty) {
-      const confirmed = window.confirm(
-        "You have unsaved changes. Leave without saving?"
-      );
-      if (!confirmed) return;
+      setShowLeaveConfirm(true);
+    } else {
+      onBack();
     }
-    onBack();
   }
 
   return (
+    <>
+    <ConfirmDialog
+      open={showLeaveConfirm}
+      title="Unsaved changes"
+      description="You have unsaved changes. Leave without saving?"
+      confirmLabel="Leave"
+      cancelLabel="Stay"
+      variant="default"
+      onConfirm={() => { setShowLeaveConfirm(false); onBack(); }}
+      onCancel={() => setShowLeaveConfirm(false)}
+    />
     <header className="fixed top-0 left-0 right-0 z-40 h-14 flex items-center gap-2 px-3 bg-background border-b border-border shadow-sm">
       {/* Back */}
       <Button
@@ -276,7 +289,7 @@ export function EditorToolbar({
         <Button
           size="sm"
           onClick={onRun}
-          disabled={hasErrors === true}
+          disabled={hasErrors === true || isRunning}
           className={cn(
             "gap-1.5",
             isValid
@@ -288,7 +301,7 @@ export function EditorToolbar({
           title={hasErrors ? "Fix validation errors before running" : "Run program"}
         >
           <RunIcon />
-          Run
+          {isRunning ? "Starting…" : "Run"}
         </Button>
         {hasErrors && (
           <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block z-50">
@@ -299,5 +312,6 @@ export function EditorToolbar({
         )}
       </div>
     </header>
+    </>
   );
 }

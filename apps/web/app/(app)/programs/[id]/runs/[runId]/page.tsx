@@ -3,6 +3,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/api";
 import type { ProgramSchema, Node } from "@flowos/schema";
 import { RunLogLive } from "./run-log-live";
+import { StopRunButton } from "./stop-button";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -152,6 +153,9 @@ export default async function RunLogPage({
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold">Run log</h1>
           <StatusBadge status={run.status} />
+          {["running", "waiting_approval", "pending"].includes(run.status) && (
+            <StopRunButton runId={run.id} />
+          )}
         </div>
       </div>
 

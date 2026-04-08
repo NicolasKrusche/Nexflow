@@ -20,14 +20,18 @@ const CHECK_LABELS: Record<string, string> = {
 function CheckIcon({ status }: { status: PreFlightCheck["status"] }) {
   if (status === "pass")
     return (
-      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-500/15 text-green-600 dark:text-green-400 text-xs font-bold">
-        ✓
+      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-500/15 text-green-600 dark:text-green-400">
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2} className="h-3 w-3">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M2 6l3 3 5-5" />
+        </svg>
       </span>
     );
   if (status === "fail")
     return (
-      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-destructive/15 text-destructive text-xs font-bold">
-        ✕
+      <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-destructive/15 text-destructive">
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2} className="h-3 w-3">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l6 6M9 3l-6 6" />
+        </svg>
       </span>
     );
   return (

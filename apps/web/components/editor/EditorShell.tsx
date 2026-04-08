@@ -567,11 +567,33 @@ export function EditorShell({
 
   // ── Run ───────────────────────────────────────────────────────────────────
 
+  const [isRunning, setIsRunning] = React.useState(false);
+
   const handleRun = useCallback(async () => {
     if (state.validationResult && !state.validationResult.valid) return;
-    // TODO(Phase 3): POST to runtime
-    alert("Run functionality will be available in Phase 3.");
-  }, [state.validationResult]);
+    setIsRunning(true);
+    try {
+      const res = await fetch("/api/runs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ program_id: programId }),
+      });
+      if (res.ok) {
+        const { run_id } = await res.json();
+        router.push(`/programs/${programId}/runs/${run_id}`);
+      } else {
+        const { error, checks } = await res.json().catch(() => ({ error: "Failed to start run" }));
+        const msg = checks
+          ? `Pre-flight failed:\n${checks.map((c: { message: string }) => `• ${c.message}`).join("\n")}`
+          : (error ?? "Failed to start run");
+        alert(msg);
+      }
+    } catch {
+      alert("Could not reach the server. Check your connection and try again.");
+    } finally {
+      setIsRunning(false);
+    }
+  }, [state.validationResult, programId, router]);
 
   // ── Back navigation ───────────────────────────────────────────────────────
 
@@ -611,6 +633,7 @@ export function EditorShell({
         validationResult={state.validationResult}
         onUndo={() => dispatch({ type: "UNDO" })}
         onRedo={() => dispatch({ type: "REDO" })}
+        isRunning={isRunning}
         onSave={() => performSave(state.schema)}
         onValidate={handleValidate}
         onRun={handleRun}
@@ -678,6 +701,10 @@ export function EditorShell({
             apiKeys={apiKeys}
             onUpdate={handleSidebarUpdate}
             onClose={() => dispatch({ type: "SELECT_NODE", nodeId: null })}
+            onDelete={(nodeId) => {
+              dispatch({ type: "REMOVE_NODE", nodeId });
+              dispatch({ type: "SELECT_NODE", nodeId: null });
+            }}
           />
         )}
 

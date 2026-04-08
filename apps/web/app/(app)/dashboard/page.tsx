@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { DeleteProgramButton } from "@/components/programs/delete-program-button";
 
 type Program = {
   id: string;
@@ -48,30 +49,29 @@ export default async function DashboardPage() {
       ) : (
         <div className="space-y-3">
           {list.map((p) => (
-            <Link key={p.id} href={`/programs/${p.id}`}>
-              <Card className="hover:border-ring transition-colors cursor-pointer">
-                <CardContent className="py-4 px-5 flex items-center justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{p.name}</p>
-                    {p.description && (
-                      <p className="text-xs text-muted-foreground mt-0.5 truncate">{p.description}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground mt-1">
-                      v{p.schema_version} · Updated {new Date(p.updated_at).toLocaleDateString()}
-                      {p.last_run_at && <> · Last run {new Date(p.last_run_at).toLocaleDateString()}</>}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Badge variant="outline" className="capitalize text-xs">
-                      {p.execution_mode}
-                    </Badge>
-                    <Badge variant={p.is_active ? "success" : "secondary"}>
-                      {p.is_active ? "Active" : "Inactive"}
-                    </Badge>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
+            <Card key={p.id} className="hover:border-ring transition-colors">
+              <CardContent className="py-4 px-5 flex items-center justify-between gap-4">
+                <Link href={`/programs/${p.id}`} className="min-w-0 flex-1">
+                  <p className="text-sm font-medium truncate">{p.name}</p>
+                  {p.description && (
+                    <p className="text-xs text-muted-foreground mt-0.5 truncate">{p.description}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-1">
+                    v{p.schema_version} · Updated {new Date(p.updated_at).toLocaleDateString()}
+                    {p.last_run_at && <> · Last run {new Date(p.last_run_at).toLocaleDateString()}</>}
+                  </p>
+                </Link>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Badge variant="outline" className="capitalize text-xs">
+                    {p.execution_mode}
+                  </Badge>
+                  <Badge variant={p.is_active ? "success" : "secondary"}>
+                    {p.is_active ? "Active" : "Inactive"}
+                  </Badge>
+                  <DeleteProgramButton programId={p.id} programName={p.name} />
+                </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}

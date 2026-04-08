@@ -83,7 +83,8 @@
       "Bash(mkdir -p \"H:/Archon/ARCHON_1/apps/web/app/api/runs/[id]/cancel\")",
       "Bash(mkdir -p \"H:/Archon/ARCHON_1/apps/web/app/api/internal/runs/[id]/complete\")",
       "Bash(mkdir -p \"H:/Archon/ARCHON_1/apps/web/app/api/programs/[id]/conflicts\")",
-      "Bash(mkdir -p \"H:/Archon/ARCHON_1/apps/web/app/api/programs/[id]/execution-mode\")"
+      "Bash(mkdir -p \"H:/Archon/ARCHON_1/apps/web/app/api/programs/[id]/execution-mode\")",
+      "WebFetch(domain:commons.wikimedia.org)"
     ]
   }
 }

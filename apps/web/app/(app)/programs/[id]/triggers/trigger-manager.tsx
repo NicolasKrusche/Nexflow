@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -210,6 +211,7 @@ function TriggerCard({
   const [isDeleting, startDelete] = useTransition();
   const [isToggling, startToggle] = useTransition();
   const [copied, setCopied] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const handleToggle = () => {
     startToggle(async () => {
@@ -222,8 +224,10 @@ function TriggerCard({
     });
   };
 
-  const handleDelete = () => {
-    if (!confirm("Delete this trigger?")) return;
+  const handleDelete = () => setDeleteOpen(true);
+
+  const confirmDelete = () => {
+    setDeleteOpen(false);
     startDelete(async () => {
       await fetch(`/api/programs/${programId}/triggers/${trigger.id}`, {
         method: "DELETE",
@@ -240,6 +244,15 @@ function TriggerCard({
   };
 
   return (
+    <>
+    <ConfirmDialog
+      open={deleteOpen}
+      title="Delete trigger?"
+      description="This trigger will be permanently deleted and will no longer fire."
+      confirmLabel="Delete"
+      onConfirm={confirmDelete}
+      onCancel={() => setDeleteOpen(false)}
+    />
     <div className={`rounded-lg border p-4 space-y-3 transition-opacity ${trigger.is_active ? "border-border" : "border-border opacity-60"}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -322,6 +335,7 @@ function TriggerCard({
         Created {formatDateTime(trigger.created_at)}
       </p>
     </div>
+    </>
   );
 }
 

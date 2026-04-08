@@ -101,23 +101,39 @@ export async function POST(request: Request) {
 
   const run = runRaw as unknown as RunRow;
 
-  // Fire and forget — dispatch to Python runtime
+  // Dispatch to Python runtime — if it rejects or is unreachable, fail the run immediately
   const runtimeUrl = process.env.RUNTIME_URL ?? "http://localhost:8000";
   const runtimeSecret = process.env.RUNTIME_SECRET ?? "";
-  fetch(`${runtimeUrl}/execute`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-runtime-secret": runtimeSecret,
-    },
-    body: JSON.stringify({
-      run_id: run.id,
-      program_id,
-      user_id: user.id,
-      schema,
-      triggered_by: "manual",
-    }),
-  }).catch(() => {}); // Runtime errors surfaced via Realtime, not this request
+
+  const markFailed = (msg: string) =>
+    serviceClient
+      .from("runs")
+      .update({ status: "failed", error_message: msg, completed_at: new Date().toISOString() })
+      .eq("id", run.id);
+
+  try {
+    const runtimeRes = await fetch(`${runtimeUrl}/execute`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-runtime-secret": runtimeSecret,
+      },
+      body: JSON.stringify({
+        run_id: run.id,
+        program_id,
+        user_id: user.id,
+        schema,
+        triggered_by: "manual",
+      }),
+    });
+    if (!runtimeRes.ok) {
+      await markFailed(`Runtime rejected execution (${runtimeRes.status})`);
+      return apiError("Runtime failed to accept the run", 502);
+    }
+  } catch {
+    await markFailed("Runtime is unreachable — is the runtime service running?");
+    return apiError("Runtime is unreachable", 503);
+  }
 
   return NextResponse.json({ run_id: run.id, status: "running" });
 }

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator, Optional
@@ -10,7 +11,7 @@ from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from db import get_active_cron_workflows, get_db, update_run
+from db import get_active_cron_workflows, get_db, release_run_locks, update_run
 from engine.executor import ExecutionError, ProgramExecutor
 from schema import ProgramSchema, parse_schema
 
@@ -121,6 +122,9 @@ async def execute_program(
     return {"status": "started", "run_id": body.run_id}
 
 
+RUN_TIMEOUT_SECONDS = 600  # 10 minutes max per run
+
+
 async def _run_program(
     schema: ProgramSchema,
     run_id: str,
@@ -130,8 +134,14 @@ async def _run_program(
     db = get_db()
     try:
         executor = ProgramExecutor(schema, run_id, user_id)
-        await executor.execute(trigger_payload)
+        await asyncio.wait_for(executor.execute(trigger_payload), timeout=RUN_TIMEOUT_SECONDS)
         await update_run(db, run_id, status="completed", completed_at="now()")
+    except asyncio.TimeoutError:
+        await update_run(
+            db, run_id, status="failed",
+            error_message=f"Run exceeded maximum execution time ({RUN_TIMEOUT_SECONDS}s)",
+            completed_at="now()",
+        )
     except ExecutionError as e:
         await update_run(
             db, run_id, status="failed", error_message=e.message, completed_at="now()"
@@ -140,6 +150,8 @@ async def _run_program(
         await update_run(
             db, run_id, status="failed", error_message=str(e), completed_at="now()"
         )
+    finally:
+        await release_run_locks(db, run_id)
 
 
 @app.get("/health")
