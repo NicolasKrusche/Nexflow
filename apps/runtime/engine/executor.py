@@ -299,12 +299,22 @@ class ProgramExecutor:
         """Call the LLM via LiteLLM-compatible API."""
         litellm_url = os.environ.get("LITELLM_URL")
 
+        PROVIDER_URLS: dict[str, str] = {
+            "groq":       "https://api.groq.com/openai/v1",
+            "google":     "https://generativelanguage.googleapis.com/v1beta/openai",
+            "openrouter": "https://openrouter.ai/api/v1",
+            "openai":     "https://api.openai.com/v1",
+            "anthropic":  "https://api.anthropic.com/v1",
+        }
+
         if litellm_url:
             base_url = litellm_url
-        elif "claude" in cfg.model or "anthropic" in cfg.model:
+        elif "claude" in cfg.model or provider == "anthropic":
             base_url = "https://api.anthropic.com/v1"
-        elif provider == "openrouter" or "/" in cfg.model:
-            # OpenRouter models use provider/model-name format (e.g. nvidia/nemotron-...)
+        elif provider in PROVIDER_URLS:
+            base_url = PROVIDER_URLS[provider]
+        elif "/" in cfg.model:
+            # OpenRouter-style provider/model format
             base_url = "https://openrouter.ai/api/v1"
         else:
             base_url = "https://api.openai.com/v1"
@@ -316,22 +326,32 @@ class ProgramExecutor:
 
         content: str
         if "anthropic" in base_url and (litellm_url is None or "litellm" not in base_url):
+            # Anthropic uses x-api-key, not Bearer
+            headers.pop("Authorization", None)
             headers["x-api-key"] = api_key
             headers["anthropic-version"] = "2023-06-01"
+            body: dict = {
+                "model": cfg.model,
+                "max_tokens": 4096,
+                "messages": [
+                    {"role": "user", "content": json.dumps(input_data)}
+                ],
+            }
+            # Anthropic rejects empty/None system prompts — only include if non-empty
+            if cfg.system_prompt and cfg.system_prompt.strip():
+                body["system"] = cfg.system_prompt
             async with httpx.AsyncClient(timeout=120) as client:
                 resp = await client.post(
                     f"{base_url}/messages",
                     headers=headers,
-                    json={
-                        "model": cfg.model,
-                        "max_tokens": 4096,
-                        "system": cfg.system_prompt,
-                        "messages": [
-                            {"role": "user", "content": json.dumps(input_data)}
-                        ],
-                    },
+                    json=body,
                 )
-                resp.raise_for_status()
+                print(f"[LLM/anthropic] {resp.status_code} model={cfg.model} body={resp.text[:800]}", flush=True)
+                if not resp.is_success:
+                    raise Exception(
+                        f"LLM API error {resp.status_code} from {base_url} "
+                        f"(model={cfg.model}): {resp.text[:500]}"
+                    )
                 data = resp.json()
                 content = data["content"][0]["text"] if data.get("content") else ""
         else:
@@ -348,7 +368,11 @@ class ProgramExecutor:
                         ],
                     },
                 )
-                resp.raise_for_status()
+                if not resp.is_success:
+                    raise Exception(
+                        f"LLM API error {resp.status_code} from {base_url} "
+                        f"(model={cfg.model}): {resp.text[:500]}"
+                    )
                 data = resp.json()
                 content = (
                     data["choices"][0]["message"]["content"]

@@ -35,12 +35,25 @@ export function Sidebar() {
     return () => { cancelled = true; };
   }, [pathname]);
 
-  // Fetch failed run count client-side
+  // Fetch failed run count client-side.
+  // When the user is on /runs we mark everything as seen and clear the badge.
   useEffect(() => {
     let cancelled = false;
+
+    if (pathname.startsWith("/runs")) {
+      // Mark current time as "last seen" so future failures are the only ones badged
+      localStorage.setItem("runs_last_seen", Date.now().toString());
+      setFailedRuns(0);
+      return;
+    }
+
     async function fetchFailed() {
       try {
-        const res = await fetch("/api/runs/failed-count");
+        const lastSeen = localStorage.getItem("runs_last_seen");
+        const url = lastSeen
+          ? `/api/runs/failed-count?since=${lastSeen}`
+          : "/api/runs/failed-count";
+        const res = await fetch(url);
         if (!res.ok) return;
         const data = (await res.json()) as { count: number };
         if (!cancelled) setFailedRuns(data.count ?? 0);

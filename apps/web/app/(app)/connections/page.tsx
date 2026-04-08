@@ -153,7 +153,7 @@ export default function ConnectionsPage() {
   const connectedProviders = new Set(connections.map((c) => c.provider));
 
   return (
-    <div className="max-w-2xl space-y-8">
+    <div className="space-y-8">
       <div>
         <h1 className="text-xl font-semibold">Connections</h1>
         <p className="text-sm text-muted-foreground mt-0.5">

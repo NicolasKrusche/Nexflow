@@ -80,7 +80,7 @@ export default async function ProgramPage({ params }: { params: { id: string } }
   };
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>

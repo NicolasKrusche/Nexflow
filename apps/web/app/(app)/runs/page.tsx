@@ -101,7 +101,7 @@ export default async function RunsPage({
   ];
 
   return (
-    <div className="max-w-4xl space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Runs</h1>
         <div className="flex items-center gap-1">

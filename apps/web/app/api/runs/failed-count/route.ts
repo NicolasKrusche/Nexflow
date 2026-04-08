@@ -4,7 +4,7 @@ import { apiError, createServiceClient, getAuthUser } from "@/lib/api";
 // GET /api/runs/failed-count
 // Returns { count: N } — number of failed runs in the last 7 days for the current user.
 // Used by the sidebar to show a notification badge.
-export async function GET() {
+export async function GET(request: Request) {
   const user = await getAuthUser();
   if (!user) return apiError("Unauthorized", 401);
 
@@ -19,8 +19,12 @@ export async function GET() {
   const programIds = (programsRaw ?? []).map((p: { id: string }) => p.id);
   if (programIds.length === 0) return NextResponse.json({ count: 0 });
 
-  // Count failed runs in last 7 days
-  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  // Use client-supplied "since" (last time user visited /runs) if provided,
+  // otherwise fall back to 7-day window.
+  const sinceParam = new URL(request.url).searchParams.get("since");
+  const since = sinceParam
+    ? new Date(parseInt(sinceParam, 10)).toISOString()
+    : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
   const { count, error } = await serviceClient
     .from("runs")
