@@ -21,6 +21,8 @@ from schema import (
     SchemaNode,
     StepConfig,
 )
+from connectors import get_connector
+from connectors.base import ConnectorError
 from db import (
     acquire_resource_lock,
     cleanup_stale_locks,
@@ -398,12 +400,26 @@ class ProgramExecutor:
                 node.id,
             )
         if isinstance(cfg, OAuthConnectionConfig):
-            # Fetch a valid (auto-refreshed) OAuth token for this connection
             connection_id = node.connection
             if not connection_id:
                 raise ExecutionError("OAUTH_CONFIG_INVALID", "OAuth connection node has no connection_id")
             access_token = await self._fetch_oauth_token(connection_id)
-            # Return the token so downstream nodes can use it
+
+            # If the node specifies a native operation, dispatch to the connector.
+            if cfg.operation:
+                connector = get_connector(self._provider_for_connection(connection_id))
+                if connector is None:
+                    raise ExecutionError(
+                        "CONNECTOR_NOT_FOUND",
+                        f"No native connector found for connection {connection_id}",
+                    )
+                try:
+                    result = await connector.execute(cfg.operation, cfg.operation_params, access_token)
+                except ConnectorError as exc:
+                    raise ExecutionError(exc.code, exc.message) from exc
+                return {**input_data, **result, "connection_id": connection_id}
+
+            # No operation — surface the token to downstream nodes.
             return {**input_data, "access_token": access_token, "connection_id": connection_id}
         return input_data
 
@@ -630,6 +646,19 @@ class ProgramExecutor:
             if self.conflict_policy == "fail":
                 raise ConflictError(resource_id)
             # For queue/skip, we just proceed (best-effort locking for MVP)
+
+    def _provider_for_connection(self, connection_id: str) -> str:
+        """Look up the provider slug for a connection from the DB."""
+        result = (
+            self.db.table("connections")
+            .select("provider")
+            .eq("id", connection_id)
+            .single()
+            .execute()
+        )
+        if not result.data:
+            raise ExecutionError("CONNECTION_NOT_FOUND", f"Connection {connection_id} not found")
+        return str(result.data["provider"])
 
     async def _fetch_oauth_token(self, connection_id: str) -> str:
         """Fetch a valid (auto-refreshed) OAuth access token from Next.js."""
