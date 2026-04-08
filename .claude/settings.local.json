@@ -101,7 +101,15 @@
       "Bash(find /h/Archon/ARCHON_1 -type f \\\\\\(-name *validation* -o -name *preflight* \\\\\\) \\\\\\(-name *.tsx -o -name *.ts \\\\\\))",
       "Bash(find \"H:/Archon/ARCHON_1/apps/web/app/\\(app\\)/programs\" -name \"*.tsx\")",
       "Bash(find \"H:/Archon/ARCHON_1/apps/web/app/\\(app\\)\" -name \"page.tsx\")",
-      "Bash(curl -s -X POST https://fzvmsejkqjbqyavxvirf.supabase.co/auth/v1/admin/users -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6dm1zZWprcWpicXlhdnh2aXJmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTQyNTg1MywiZXhwIjoyMDkxMDAxODUzfQ.-GVyMZ-vGSat1mqRAUxaDiifcidqtBDfTenJ25vNfu8' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6dm1zZWprcWpicXlhdnh2aXJmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTQyNTg1MywiZXhwIjoyMDkxMDAxODUzfQ.-GVyMZ-vGSat1mqRAUxaDiifcidqtBDfTenJ25vNfu8' -H 'Content-Type: application/json' -d '{\"email\":\"demo@nexflow.systems\",\"password\":\"Nexflow2025!\",\"email_confirm\":true}')"
+      "Bash(curl -s -X POST https://fzvmsejkqjbqyavxvirf.supabase.co/auth/v1/admin/users -H 'apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6dm1zZWprcWpicXlhdnh2aXJmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTQyNTg1MywiZXhwIjoyMDkxMDAxODUzfQ.-GVyMZ-vGSat1mqRAUxaDiifcidqtBDfTenJ25vNfu8' -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ6dm1zZWprcWpicXlhdnh2aXJmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTQyNTg1MywiZXhwIjoyMDkxMDAxODUzfQ.-GVyMZ-vGSat1mqRAUxaDiifcidqtBDfTenJ25vNfu8' -H 'Content-Type: application/json' -d '{\"email\":\"demo@nexflow.systems\",\"password\":\"Nexflow2025!\",\"email_confirm\":true}')",
+      "Bash(ls H:/Archon/ARCHON_1/apps/runtime/.env*)",
+      "Bash(ls H:/Archon/ARCHON_1/.env*)",
+      "Bash(poetry env:*)",
+      "Bash(pip3 --version)",
+      "Bash(ls H:/Archon/ARCHON_1/apps/runtime/requirements*.txt)",
+      "Bash(/c/Python313/python -m venv venv)",
+      "Bash(venv/Scripts/pip install:*)",
+      "Bash(venv/Scripts/uvicorn main:app --host 0.0.0.0 --port 8000 --reload)"
     ]
   }
 }
