@@ -97,14 +97,15 @@ export interface StepNode extends NodeBase {
 }
 
 export type StepConfig =
-  | {
-      logic_type: "transform";
-      transformation: string;
-      input_schema: DataSchema | null;
-      output_schema: DataSchema | null;
-    }
+  | { logic_type: "transform"; transformation: string; input_schema: DataSchema | null; output_schema: DataSchema | null }
   | { logic_type: "filter"; condition: string; pass_schema: DataSchema | null }
-  | { logic_type: "branch"; conditions: BranchCondition[]; default_branch: string };
+  | { logic_type: "branch"; conditions: BranchCondition[]; default_branch: string }
+  | { logic_type: "delay"; seconds: number }
+  | { logic_type: "loop"; over: string; item_var: string }
+  | { logic_type: "format"; template: string; output_key: string }
+  | { logic_type: "parse"; input_key: string; format: "json" | "csv" | "lines" }
+  | { logic_type: "deduplicate"; key: string }
+  | { logic_type: "sort"; key: string; order: "asc" | "desc" };
 
 export interface BranchCondition {
   condition: string;

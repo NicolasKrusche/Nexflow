@@ -35,6 +35,8 @@ import { EditorToolbar } from "@/components/editor/EditorToolbar";
 import { VersionHistoryPanel } from "@/components/editor/VersionHistoryPanel";
 import { NodeSidebar } from "@/components/sidebars/NodeSidebar";
 import type { ApiKey } from "@/components/sidebars/NodeSidebar";
+import { NodePalettePanel } from "@/components/editor/NodePalettePanel";
+import type { NodeVariant } from "@/components/editor/NodePalettePanel";
 
 import type { ProgramSchema, Node as SchemaNode } from "@flowos/schema";
 import type { ValidationResult } from "@/lib/validation";
@@ -58,30 +60,40 @@ const edgeTypes = {
 
 // ─── Default node configs for new nodes ──────────────────────────────────────
 
-function makeDefaultNode(
-  type: "trigger" | "agent" | "step" | "connection",
-  id: string,
-  position: { x: number; y: number }
-): SchemaNode {
-  if (type === "trigger") {
+const OAUTH_PROVIDER_LABELS: Record<string, string> = {
+  gmail: "Gmail", notion: "Notion", slack: "Slack", github: "GitHub",
+  sheets: "Google Sheets", calendar: "Google Calendar", docs: "Google Docs",
+  drive: "Google Drive", airtable: "Airtable", hubspot: "HubSpot",
+  typeform: "Typeform", asana: "Asana", outlook: "Outlook",
+};
+
+function makeDefaultNode(variant: NodeVariant, id: string, position: { x: number; y: number }): SchemaNode {
+  if (variant.type === "trigger") {
+    const labels: Record<string, string> = {
+      manual: "Manual Trigger", cron: "Cron Schedule",
+      webhook: "Webhook Trigger", event: "Event Trigger",
+      program_output: "Program Output Trigger",
+    };
+    const configs: Record<string, unknown> = {
+      manual:         { trigger_type: "manual" },
+      cron:           { trigger_type: "cron", expression: "0 9 * * 1-5", timezone: "UTC" },
+      webhook:        { trigger_type: "webhook", endpoint_id: crypto.randomUUID(), method: "POST" },
+      event:          { trigger_type: "event", source: "", event: "", filter: null },
+      program_output: { trigger_type: "program_output", source_program_id: "__USER_ASSIGNED__", on_status: ["success"] },
+    };
     return {
-      id,
-      type: "trigger",
-      label: "New Trigger",
+      id, type: "trigger", status: "idle", connection: null,
+      label: labels[variant.subtype] ?? "Trigger",
       description: "",
-      connection: null,
-      config: { trigger_type: "manual" },
       position,
-      status: "idle",
+      config: configs[variant.subtype] as SchemaNode["config"],
     };
   }
-  if (type === "agent") {
+
+  if (variant.type === "agent") {
     return {
-      id,
-      type: "agent",
-      label: "New Agent",
-      description: "",
-      connection: null,
+      id, type: "agent", label: "AI Agent", description: "", connection: null,
+      position, status: "idle",
       config: {
         model: "__USER_ASSIGNED__",
         api_key_ref: "__USER_ASSIGNED__",
@@ -92,25 +104,43 @@ function makeDefaultNode(
         approval_timeout_hours: 24,
         scope_required: null,
         scope_access: "read",
-        retry: {
-          max_attempts: 3,
-          backoff: "exponential",
-          backoff_base_seconds: 5,
-          fail_program_on_exhaust: false,
-        },
+        retry: { max_attempts: 3, backoff: "exponential", backoff_base_seconds: 5, fail_program_on_exhaust: false },
         tools: [],
       },
-      position,
-      status: "idle",
     };
   }
-  if (type === "connection") {
+
+  if (variant.type === "step") {
+    const labels: Record<string, string> = {
+      transform: "Transform", filter: "Filter", branch: "Branch",
+      delay: "Delay", loop: "Loop", format: "Format",
+      parse: "Parse", deduplicate: "Deduplicate", sort: "Sort",
+    };
+    const configs: Record<string, unknown> = {
+      transform:   { logic_type: "transform", transformation: "", input_schema: null, output_schema: null },
+      filter:      { logic_type: "filter", condition: "", pass_schema: null },
+      branch:      { logic_type: "branch", conditions: [], default_branch: "" },
+      delay:       { logic_type: "delay", seconds: 5 },
+      loop:        { logic_type: "loop", over: "input.items", item_var: "item" },
+      format:      { logic_type: "format", template: "", output_key: "text" },
+      parse:       { logic_type: "parse", input_key: "text", format: "json" },
+      deduplicate: { logic_type: "deduplicate", key: "id" },
+      sort:        { logic_type: "sort", key: "id", order: "asc" },
+    };
     return {
-      id,
-      type: "connection",
-      label: "HTTP Request",
+      id, type: "step", status: "idle", connection: null,
+      label: labels[variant.subtype] ?? "Step",
       description: "",
-      connection: null,
+      position,
+      config: configs[variant.subtype] as SchemaNode["config"],
+    };
+  }
+
+  // connection
+  if (variant.subtype === "http") {
+    return {
+      id, type: "connection", label: "HTTP Request", description: "", connection: null,
+      position, status: "idle",
       config: {
         connector_type: "http",
         method: "GET",
@@ -124,25 +154,19 @@ function makeDefaultNode(
         timeout_seconds: null,
         retry: null,
       },
-      position,
-      status: "idle",
     };
   }
-  // step
+  // OAuth connection
   return {
-    id,
-    type: "step",
-    label: "New Step",
+    id, type: "connection",
+    label: OAUTH_PROVIDER_LABELS[variant.subtype] ?? variant.subtype,
     description: "",
-    connection: null,
+    connection: null, // user picks in sidebar
+    position, status: "idle",
     config: {
-      logic_type: "transform",
-      transformation: "",
-      input_schema: null,
-      output_schema: null,
+      scope_access: "read",
+      scope_required: [],
     },
-    position,
-    status: "idle",
   };
 }
 
@@ -174,9 +198,10 @@ export function EditorShell({
     { ...initialEditorState(initialSchema), validationResult: initialValidation }
   );
 
-  // ── Version history panel visibility ─────────────────────────────────────
+  // ── Panel visibility ──────────────────────────────────────────────────────
 
   const [showHistory, setShowHistory] = React.useState(false);
+  const [showPalette, setShowPalette] = React.useState(false);
 
   // ── Clipboard for copy/paste ──────────────────────────────────────────────
 
@@ -509,13 +534,15 @@ export function EditorShell({
     dispatch({ type: "SELECT_EDGE", edgeId: null });
   }, []);
 
-  // ── Add node from toolbar ─────────────────────────────────────────────────
+  // ── Add node from palette ─────────────────────────────────────────────────
 
   const handleAddNode = useCallback(
-    (type: "trigger" | "agent" | "step" | "connection") => {
+    (variant: NodeVariant) => {
       const id = crypto.randomUUID();
-      const position = { x: 400, y: 200 };
-      const schemaNode = makeDefaultNode(type, id, position);
+      // Stagger new nodes slightly so rapid additions don't stack
+      const offset = Math.floor(Math.random() * 60) - 30;
+      const position = { x: 380 + offset, y: 200 + offset };
+      const schemaNode = makeDefaultNode(variant, id, position);
 
       dispatch({ type: "UPDATE_NODE", nodeId: id, patch: schemaNode });
 
@@ -639,16 +666,33 @@ export function EditorShell({
         onValidate={handleValidate}
         onRun={handleRun}
         onBack={handleBack}
-        onAddNode={handleAddNode}
+        showPalette={showPalette}
+        onTogglePalette={() => {
+          setShowPalette((v) => !v);
+          if (showHistory) setShowHistory(false);
+        }}
         onHistory={() => {
           setShowHistory((prev) => !prev);
-          // Close node sidebar when opening history panel
-          if (!showHistory) dispatch({ type: "SELECT_NODE", nodeId: null });
+          if (!showHistory) {
+            dispatch({ type: "SELECT_NODE", nodeId: null });
+            setShowPalette(false);
+          }
         }}
       />
 
-      {/* Canvas area — below toolbar */}
-      <div className="relative h-[calc(100vh-56px)] mt-14">
+      {/* Node palette panel — slides in from left */}
+      {showPalette && !isMobile && (
+        <NodePalettePanel
+          onAdd={handleAddNode}
+          onClose={() => setShowPalette(false)}
+        />
+      )}
+
+      {/* Canvas area — below toolbar, offset left when palette is open */}
+      <div
+        className="relative h-[calc(100vh-56px)] mt-14 transition-[padding-left] duration-200"
+        style={{ paddingLeft: showPalette && !isMobile ? 240 : 0 }}
+      >
         {/* Mobile banner */}
         {isMobile && (
           <div className="absolute inset-x-0 top-0 z-20 bg-amber-50 dark:bg-amber-950/50 border-b border-amber-200 dark:border-amber-800 px-4 py-2 text-xs text-amber-800 dark:text-amber-300 text-center">

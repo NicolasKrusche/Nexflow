@@ -166,7 +166,7 @@ export function ConflictResolutionPanel({ programId, conflictPolicy, conflicts }
       <div className="rounded-lg bg-muted p-4 text-xs text-muted-foreground space-y-1">
         <p className="font-medium text-foreground text-sm">How conflict detection works</p>
         <p>
-          Before a run starts, FlowOS checks if any other program runs are currently active that
+          Before a run starts, Nexflow checks if any other program runs are currently active that
           share the same connections. If a conflict is detected, your chosen policy determines
           what happens next.
         </p>

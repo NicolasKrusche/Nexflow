@@ -52,8 +52,14 @@ export function Sidebar() {
 
   return (
     <aside className="fixed left-0 top-0 h-full w-56 bg-card border-r border-border flex flex-col z-40">
-      <div className="h-14 flex items-center px-5 border-b border-border">
-        <span className="font-semibold text-base tracking-tight">FlowOS</span>
+      <div className="h-14 flex items-center px-4 border-b border-border gap-2.5">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/pictures/logo-no-bg.png"
+          alt="Nexflow"
+          className="h-7 w-7 object-contain shrink-0"
+        />
+        <span className="font-semibold text-base tracking-tight">Nexflow</span>
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-0.5">

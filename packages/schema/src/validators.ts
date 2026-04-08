@@ -128,14 +128,37 @@ export const StepConfigZ = z.discriminatedUnion("logic_type", [
   z.object({
     logic_type: z.literal("branch"),
     conditions: z
-      .array(
-        z.object({
-          condition: z.string().min(1),
-          target_node_id: z.string().min(1),
-        })
-      )
+      .array(z.object({ condition: z.string().min(1), target_node_id: z.string().min(1) }))
       .min(1),
     default_branch: z.string().min(1),
+  }),
+  z.object({
+    logic_type: z.literal("delay"),
+    seconds: z.number().min(0),
+  }),
+  z.object({
+    logic_type: z.literal("loop"),
+    over: z.string().min(1),
+    item_var: z.string().min(1),
+  }),
+  z.object({
+    logic_type: z.literal("format"),
+    template: z.string().min(1),
+    output_key: z.string().min(1),
+  }),
+  z.object({
+    logic_type: z.literal("parse"),
+    input_key: z.string().min(1),
+    format: z.enum(["json", "csv", "lines"]),
+  }),
+  z.object({
+    logic_type: z.literal("deduplicate"),
+    key: z.string().min(1),
+  }),
+  z.object({
+    logic_type: z.literal("sort"),
+    key: z.string().min(1),
+    order: z.enum(["asc", "desc"]),
   }),
 ]);
 

@@ -1166,6 +1166,32 @@ function TriggerSidebar({
 
 // ─── Step sidebar ─────────────────────────────────────────────────────────────
 
+const LOGIC_TYPE_OPTIONS: { value: StepConfig["logic_type"]; label: string; group: string }[] = [
+  { value: "transform",   label: "Transform",   group: "Data" },
+  { value: "filter",      label: "Filter",      group: "Data" },
+  { value: "format",      label: "Format",      group: "Data" },
+  { value: "parse",       label: "Parse",       group: "Data" },
+  { value: "deduplicate", label: "Deduplicate", group: "Data" },
+  { value: "sort",        label: "Sort",        group: "Data" },
+  { value: "branch",      label: "Branch",      group: "Flow" },
+  { value: "loop",        label: "Loop",        group: "Flow" },
+  { value: "delay",       label: "Delay",       group: "Flow" },
+];
+
+function makeDefaultStepConfig(t: StepConfig["logic_type"]): StepConfig {
+  switch (t) {
+    case "transform":   return { logic_type: "transform", transformation: "", input_schema: null, output_schema: null };
+    case "filter":      return { logic_type: "filter", condition: "", pass_schema: null };
+    case "branch":      return { logic_type: "branch", conditions: [], default_branch: "" };
+    case "delay":       return { logic_type: "delay", seconds: 5 };
+    case "loop":        return { logic_type: "loop", over: "input.items", item_var: "item" };
+    case "format":      return { logic_type: "format", template: "", output_key: "text" };
+    case "parse":       return { logic_type: "parse", input_key: "text", format: "json" };
+    case "deduplicate": return { logic_type: "deduplicate", key: "id" };
+    case "sort":        return { logic_type: "sort", key: "id", order: "asc" };
+  }
+}
+
 function StepSidebar({
   config,
   onUpdate,
@@ -1176,47 +1202,54 @@ function StepSidebar({
   const [newCondition, setNewCondition] = useState("");
   const [newCondTarget, setNewCondTarget] = useState("");
 
+  // Group options for the select
+  const groupedOptions: Record<string, typeof LOGIC_TYPE_OPTIONS> = {};
+  LOGIC_TYPE_OPTIONS.forEach((o) => {
+    (groupedOptions[o.group] ??= []).push(o);
+  });
+
   return (
     <div className="space-y-3">
-      <FieldGroup label="Logic type" htmlFor="step-logic">
+      <FieldGroup label="Operation" htmlFor="step-logic">
         <Select
           id="step-logic"
           value={config.logic_type}
-          onChange={(e) => {
-            const t = e.target.value as StepConfig["logic_type"];
-            if (t === "transform") onUpdate({ logic_type: "transform", transformation: "", input_schema: null, output_schema: null } as StepConfig);
-            else if (t === "filter") onUpdate({ logic_type: "filter", condition: "", pass_schema: null } as StepConfig);
-            else if (t === "branch") onUpdate({ logic_type: "branch", conditions: [], default_branch: "" } as StepConfig);
-          }}
+          onChange={(e) => onUpdate(makeDefaultStepConfig(e.target.value as StepConfig["logic_type"]))}
         >
-          <option value="transform">Transform</option>
-          <option value="filter">Filter</option>
-          <option value="branch">Branch</option>
+          {Object.entries(groupedOptions).map(([group, opts]) => (
+            <optgroup key={group} label={group}>
+              {opts.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </optgroup>
+          ))}
         </Select>
       </FieldGroup>
 
+      {/* ── Transform ── */}
       {config.logic_type === "transform" && (
         <FieldGroup
-          label="Transformation expression"
+          label="Expression"
           htmlFor="step-transform"
-          hint="JavaScript expression. input = upstream data."
+          hint="JavaScript. input = upstream data. Return the new value."
         >
           <Textarea
             id="step-transform"
             rows={7}
-            placeholder={"input.data.map(item => ({\n  id: item.id,\n  name: item.title,\n}))"}
+            placeholder={"input.items.map(item => ({\n  id: item.id,\n  name: item.title,\n}))"}
             value={config.transformation}
             onChange={(e) => onUpdate({ ...config, transformation: e.target.value })}
-            className="text-xs resize-none font-mono"
+            className="text-xs resize-y font-mono"
           />
         </FieldGroup>
       )}
 
+      {/* ── Filter ── */}
       {config.logic_type === "filter" && (
         <FieldGroup
-          label="Filter condition"
+          label="Condition"
           htmlFor="step-filter"
-          hint="Returns true to pass, false to stop. input = upstream data."
+          hint="True = pass data forward. False = stop execution."
         >
           <Input
             id="step-filter"
@@ -1227,10 +1260,11 @@ function StepSidebar({
         </FieldGroup>
       )}
 
+      {/* ── Branch ── */}
       {config.logic_type === "branch" && (
         <>
           <div className="space-y-2">
-            <Label className="text-xs">Branch conditions</Label>
+            <Label className="text-xs">Conditions</Label>
             {config.conditions.map((cond: BranchCondition, i: number) => (
               <div key={i} className="flex gap-1.5 items-start">
                 <div className="flex-1 space-y-1">
@@ -1260,10 +1294,7 @@ function StepSidebar({
                   variant="ghost"
                   size="icon"
                   className="mt-0.5 h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
-                  onClick={() => {
-                    const next = config.conditions.filter((_, j) => j !== i);
-                    onUpdate({ ...config, conditions: next });
-                  }}
+                  onClick={() => onUpdate({ ...config, conditions: config.conditions.filter((_, j) => j !== i) })}
                 >
                   <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5">
                     <path d="M4 4l8 8M12 4l-8 8" strokeLinecap="round" />
@@ -1271,50 +1302,144 @@ function StepSidebar({
                 </Button>
               </div>
             ))}
-
             <div className="space-y-1.5 pt-1">
-              <Input
-                placeholder="New condition expression"
-                value={newCondition}
-                onChange={(e) => setNewCondition(e.target.value)}
-                className="text-xs"
-              />
-              <Input
-                placeholder="Target node ID"
-                value={newCondTarget}
-                onChange={(e) => setNewCondTarget(e.target.value)}
-                className="text-xs"
-              />
+              <Input placeholder="Condition" value={newCondition} onChange={(e) => setNewCondition(e.target.value)} className="text-xs" />
+              <Input placeholder="Target node ID" value={newCondTarget} onChange={(e) => setNewCondTarget(e.target.value)} className="text-xs" />
               <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="w-full"
+                type="button" variant="outline" size="sm" className="w-full"
                 disabled={!newCondition.trim() || !newCondTarget.trim()}
                 onClick={() => {
-                  onUpdate({
-                    ...config,
-                    conditions: [
-                      ...config.conditions,
-                      { condition: newCondition.trim(), target_node_id: newCondTarget.trim() },
-                    ],
-                  });
-                  setNewCondition("");
-                  setNewCondTarget("");
+                  onUpdate({ ...config, conditions: [...config.conditions, { condition: newCondition.trim(), target_node_id: newCondTarget.trim() }] });
+                  setNewCondition(""); setNewCondTarget("");
                 }}
-              >
-                + Add condition
-              </Button>
+              >+ Add condition</Button>
             </div>
           </div>
-
           <FieldGroup label="Default branch (node ID)" htmlFor="step-default">
+            <Input id="step-default" placeholder="node-id" value={config.default_branch}
+              onChange={(e) => onUpdate({ ...config, default_branch: e.target.value })} />
+          </FieldGroup>
+        </>
+      )}
+
+      {/* ── Delay ── */}
+      {config.logic_type === "delay" && (
+        <FieldGroup label="Delay (seconds)" htmlFor="step-delay" hint="Max 300s (5 min). Pauses execution before the next node.">
+          <Input
+            id="step-delay"
+            type="number"
+            min={0}
+            max={300}
+            value={config.seconds}
+            onChange={(e) => onUpdate({ ...config, seconds: Math.min(300, Math.max(0, Number(e.target.value))) })}
+          />
+        </FieldGroup>
+      )}
+
+      {/* ── Loop ── */}
+      {config.logic_type === "loop" && (
+        <>
+          <FieldGroup label="Iterate over" htmlFor="step-loop-over" hint="Expression that resolves to an array. e.g. input.emails">
             <Input
-              id="step-default"
-              placeholder="node-id"
-              value={config.default_branch}
-              onChange={(e) => onUpdate({ ...config, default_branch: e.target.value })}
+              id="step-loop-over"
+              placeholder="input.items"
+              value={config.over}
+              onChange={(e) => onUpdate({ ...config, over: e.target.value })}
             />
+          </FieldGroup>
+          <FieldGroup label="Item variable name" htmlFor="step-loop-var" hint="Name used to reference the current item in downstream nodes.">
+            <Input
+              id="step-loop-var"
+              placeholder="item"
+              value={config.item_var}
+              onChange={(e) => onUpdate({ ...config, item_var: e.target.value })}
+            />
+          </FieldGroup>
+        </>
+      )}
+
+      {/* ── Format ── */}
+      {config.logic_type === "format" && (
+        <>
+          <FieldGroup label="Template" htmlFor="step-format-tpl" hint="Python-style str.format_map. Use {field_name} to insert values.">
+            <Textarea
+              id="step-format-tpl"
+              rows={4}
+              placeholder={"Hello {name}, your order {order_id} is ready."}
+              value={config.template}
+              onChange={(e) => onUpdate({ ...config, template: e.target.value })}
+              className="text-xs resize-y font-mono"
+            />
+          </FieldGroup>
+          <FieldGroup label="Output key" htmlFor="step-format-key" hint="Key under which the formatted string is stored in output.">
+            <Input
+              id="step-format-key"
+              placeholder="text"
+              value={config.output_key}
+              onChange={(e) => onUpdate({ ...config, output_key: e.target.value })}
+            />
+          </FieldGroup>
+        </>
+      )}
+
+      {/* ── Parse ── */}
+      {config.logic_type === "parse" && (
+        <>
+          <FieldGroup label="Input key" htmlFor="step-parse-key" hint="Key in upstream output that contains the raw string to parse.">
+            <Input
+              id="step-parse-key"
+              placeholder="text"
+              value={config.input_key}
+              onChange={(e) => onUpdate({ ...config, input_key: e.target.value })}
+            />
+          </FieldGroup>
+          <FieldGroup label="Format" htmlFor="step-parse-fmt">
+            <Select
+              id="step-parse-fmt"
+              value={config.format}
+              onChange={(e) => onUpdate({ ...config, format: e.target.value as "json" | "csv" | "lines" })}
+            >
+              <option value="json">JSON</option>
+              <option value="csv">CSV</option>
+              <option value="lines">Lines (split by newline)</option>
+            </Select>
+          </FieldGroup>
+          <p className="text-[11px] text-muted-foreground">Result stored as <span className="font-mono">output.parsed</span>.</p>
+        </>
+      )}
+
+      {/* ── Deduplicate ── */}
+      {config.logic_type === "deduplicate" && (
+        <FieldGroup label="Key field" htmlFor="step-dedup-key" hint="Field used to identify duplicates in input.items array.">
+          <Input
+            id="step-dedup-key"
+            placeholder="id"
+            value={config.key}
+            onChange={(e) => onUpdate({ ...config, key: e.target.value })}
+          />
+        </FieldGroup>
+      )}
+
+      {/* ── Sort ── */}
+      {config.logic_type === "sort" && (
+        <>
+          <FieldGroup label="Sort by field" htmlFor="step-sort-key" hint="Field to sort by in the input.items array.">
+            <Input
+              id="step-sort-key"
+              placeholder="created_at"
+              value={config.key}
+              onChange={(e) => onUpdate({ ...config, key: e.target.value })}
+            />
+          </FieldGroup>
+          <FieldGroup label="Order" htmlFor="step-sort-order">
+            <Select
+              id="step-sort-order"
+              value={config.order}
+              onChange={(e) => onUpdate({ ...config, order: e.target.value as "asc" | "desc" })}
+            >
+              <option value="asc">Ascending (A → Z, 0 → 9)</option>
+              <option value="desc">Descending (Z → A, 9 → 0)</option>
+            </Select>
           </FieldGroup>
         </>
       )}

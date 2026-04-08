@@ -1,12 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createBrowserClient } from "@/lib/supabase/client";
 
 export default function SignupPage() {
-  const router = useRouter();
   const supabase = createBrowserClient();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,7 +25,6 @@ export default function SignupPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      // If email confirmation is off, sign in directly
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
       if (!signInError) {
         window.location.href = "/dashboard";
@@ -45,9 +42,7 @@ export default function SignupPage() {
           <p className="text-muted-foreground text-sm">
             We sent a confirmation link to <strong>{email}</strong>.
           </p>
-          <Link href="/login" className="text-sm underline hover:text-foreground">
-            Back to sign in
-          </Link>
+          <Link href="/login" className="text-sm underline hover:text-foreground">Back to sign in</Link>
         </div>
       </div>
     );
@@ -56,16 +51,24 @@ export default function SignupPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm space-y-6">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold">FlowOS</h1>
-          <p className="text-muted-foreground mt-1 text-sm">Create your account</p>
+
+        {/* Logo + wordmark */}
+        <div className="flex flex-col items-center gap-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/pictures/logo-no-bg.png"
+            alt="Nexflow"
+            className="h-12 w-12 object-contain"
+          />
+          <div className="text-center">
+            <h1 className="text-2xl font-bold tracking-tight">Nexflow</h1>
+            <p className="text-muted-foreground mt-1 text-sm">Create your account</p>
+          </div>
         </div>
 
         <form onSubmit={handleSignup} className="space-y-4">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium mb-1">
-              Email
-            </label>
+            <label htmlFor="email" className="block text-sm font-medium mb-1">Email</label>
             <input
               id="email"
               type="email"
@@ -77,9 +80,7 @@ export default function SignupPage() {
             />
           </div>
           <div>
-            <label htmlFor="password" className="block text-sm font-medium mb-1">
-              Password
-            </label>
+            <label htmlFor="password" className="block text-sm font-medium mb-1">Password</label>
             <input
               id="password"
               type="password"
@@ -105,9 +106,7 @@ export default function SignupPage() {
 
         <p className="text-center text-sm text-muted-foreground">
           Already have an account?{" "}
-          <Link href="/login" className="underline hover:text-foreground">
-            Sign in
-          </Link>
+          <Link href="/login" className="underline hover:text-foreground">Sign in</Link>
         </p>
       </div>
     </div>

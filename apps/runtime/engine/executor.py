@@ -386,6 +386,84 @@ class ProgramExecutor:
             default = extra.get("default_branch", "")
             return {**input_data, "__branch_target__": default}
 
+        elif cfg.logic_type == "delay":
+            import asyncio as _asyncio
+            seconds = float(extra.get("seconds", 0))
+            if seconds > 0:
+                await _asyncio.sleep(min(seconds, 300))  # cap at 5 min
+            return input_data
+
+        elif cfg.logic_type == "loop":
+            over_expr = extra.get("over", "input")
+            item_var = extra.get("item_var", "item")
+            items = _safe_eval_transform(over_expr, input_data)
+            if not isinstance(items, list):
+                items = list(items) if hasattr(items, "__iter__") else [items]
+            return {"items": items, "item_var": item_var, "__loop_items__": items}
+
+        elif cfg.logic_type == "format":
+            template: str = extra.get("template", "")
+            output_key: str = extra.get("output_key", "text")
+            try:
+                result = template.format_map(input_data)
+            except (KeyError, ValueError):
+                result = template
+            return {**input_data, output_key: result}
+
+        elif cfg.logic_type == "parse":
+            import csv as _csv
+            import io as _io
+            input_key: str = extra.get("input_key", "text")
+            fmt: str = extra.get("format", "json")
+            raw = input_data.get(input_key, "")
+            if fmt == "json":
+                import json as _json
+                try:
+                    parsed = _json.loads(raw) if isinstance(raw, str) else raw
+                except Exception:
+                    parsed = raw
+            elif fmt == "csv":
+                try:
+                    reader = _csv.DictReader(_io.StringIO(str(raw)))
+                    parsed = list(reader)
+                except Exception:
+                    parsed = []
+            elif fmt == "lines":
+                parsed = [line for line in str(raw).splitlines() if line.strip()]
+            else:
+                parsed = raw
+            return {**input_data, "parsed": parsed}
+
+        elif cfg.logic_type == "deduplicate":
+            key: str = extra.get("key", "id")
+            items = input_data.get("items", [])
+            if not isinstance(items, list):
+                return input_data
+            seen: set = set()
+            deduped = []
+            for item in items:
+                val = item.get(key) if isinstance(item, dict) else item
+                if val not in seen:
+                    seen.add(val)
+                    deduped.append(item)
+            return {**input_data, "items": deduped}
+
+        elif cfg.logic_type == "sort":
+            key: str = extra.get("key", "id")
+            order: str = extra.get("order", "asc")
+            items = input_data.get("items", [])
+            if not isinstance(items, list):
+                return input_data
+            try:
+                sorted_items = sorted(
+                    items,
+                    key=lambda x: x.get(key) if isinstance(x, dict) else x,
+                    reverse=(order == "desc"),
+                )
+            except TypeError:
+                sorted_items = items
+            return {**input_data, "items": sorted_items}
+
         return input_data
 
     async def _execute_connection(self, node: SchemaNode, input_data: dict) -> dict:

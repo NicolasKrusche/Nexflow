@@ -24,7 +24,8 @@ interface EditorToolbarProps {
   onValidate: () => void;
   onRun: () => void;
   onBack: () => void;
-  onAddNode: (type: "trigger" | "agent" | "step" | "connection") => void;
+  showPalette: boolean;
+  onTogglePalette: () => void;
   onHistory: () => void;
 }
 
@@ -106,7 +107,8 @@ export function EditorToolbar({
   onValidate,
   onRun,
   onBack,
-  onAddNode,
+  showPalette,
+  onTogglePalette,
   onHistory,
 }: EditorToolbarProps) {
   const hasErrors = validationResult && !validationResult.valid;
@@ -168,41 +170,19 @@ export function EditorToolbar({
 
       <Sep />
 
-      {/* Add node buttons */}
-      <div className="flex items-center gap-1">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onAddNode("trigger")}
-          className="gap-1 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800 hover:bg-green-50 dark:hover:bg-green-950/30"
-        >
-          <span className="text-[10px]">+</span> Trigger
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onAddNode("agent")}
-          className="gap-1 text-purple-700 dark:text-purple-400 border-purple-200 dark:border-purple-800 hover:bg-purple-50 dark:hover:bg-purple-950/30"
-        >
-          <span className="text-[10px]">+</span> Agent
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onAddNode("step")}
-          className="gap-1 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-50 dark:hover:bg-blue-950/30"
-        >
-          <span className="text-[10px]">+</span> Step
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onAddNode("connection")}
-          className="gap-1 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-900/40"
-        >
-          <span className="text-[10px]">+</span> HTTP
-        </Button>
-      </div>
+      {/* Add node palette toggle */}
+      <Button
+        variant={showPalette ? "default" : "outline"}
+        size="sm"
+        onClick={onTogglePalette}
+        className="gap-1.5"
+        title="Add node (toggle palette)"
+      >
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={2} className="h-3.5 w-3.5">
+          <path d="M8 3v10M3 8h10" strokeLinecap="round" />
+        </svg>
+        Add node
+      </Button>
 
       <Sep />
 

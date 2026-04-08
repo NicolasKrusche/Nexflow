@@ -34,7 +34,10 @@ class TriggerConfig:
 
 @dataclass
 class StepConfig:
-    logic_type: Literal["transform", "filter", "branch"]
+    logic_type: Literal[
+        "transform", "filter", "branch",
+        "delay", "loop", "format", "parse", "deduplicate", "sort",
+    ]
     extra: dict = field(default_factory=dict)
 
 
