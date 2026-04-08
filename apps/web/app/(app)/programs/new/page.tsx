@@ -315,7 +315,7 @@ export default function NewProgramPage() {
             Generating your program…
           </div>
           <p className="text-xs text-muted-foreground">
-            Claude is designing the graph schema. This usually takes 10–20 seconds.
+            Claude is designing the graph schema. This usually takes about 1 minute.
           </p>
         </div>
       )}

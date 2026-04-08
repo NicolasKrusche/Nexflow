@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceClient, apiError } from "@/lib/api";
-import { vaultStore } from "@/lib/vault";
+import { storeOAuthTokens } from "@/lib/oauth-token";
 
 const SCOPES_STORED: Record<string, string[]> = {
   sheets: ["spreadsheets.readonly", "spreadsheets"],
@@ -54,9 +54,9 @@ export async function GET(request: Request) {
   const serviceClient = createServiceClient();
   let vaultId: string;
   try {
-    vaultId = await vaultStore(
+    vaultId = await storeOAuthTokens(
       serviceClient,
-      JSON.stringify(tokens),
+      tokens,
       `oauth:${userId}:${service}:${label}`,
       `Google ${service} OAuth tokens for user ${userId}`
     );

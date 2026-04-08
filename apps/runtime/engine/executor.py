@@ -15,6 +15,7 @@ from langchain_openai import ChatOpenAI
 from schema import (
     AgentConfig,
     HttpConnectionConfig,
+    OAuthConnectionConfig,
     ProgramSchema,
     RetryConfig,
     SchemaNode,
@@ -280,16 +281,16 @@ class ProgramExecutor:
                 return {}
 
         # Fetch API key from Next.js internal endpoint (keeps key off this service)
-        api_key = await self._fetch_api_key(cfg.api_key_ref)
+        api_key, provider = await self._fetch_api_key(cfg.api_key_ref)
 
         # Execute with retry
         return await self._with_retry(
-            lambda: self._call_llm(cfg, api_key, input_data),
+            lambda: self._call_llm(cfg, api_key, provider, input_data),
             cfg.retry,
             node.id,
         )
 
-    async def _call_llm(self, cfg: AgentConfig, api_key: str, input_data: dict) -> dict:
+    async def _call_llm(self, cfg: AgentConfig, api_key: str, provider: str, input_data: dict) -> dict:
         """Call the LLM via LiteLLM-compatible API."""
         litellm_url = os.environ.get("LITELLM_URL")
 
@@ -297,6 +298,9 @@ class ProgramExecutor:
             base_url = litellm_url
         elif "claude" in cfg.model or "anthropic" in cfg.model:
             base_url = "https://api.anthropic.com/v1"
+        elif provider == "openrouter" or "/" in cfg.model:
+            # OpenRouter models use provider/model-name format (e.g. nvidia/nemotron-...)
+            base_url = "https://openrouter.ai/api/v1"
         else:
             base_url = "https://api.openai.com/v1"
 
@@ -393,6 +397,14 @@ class ProgramExecutor:
                 retry_cfg,
                 node.id,
             )
+        if isinstance(cfg, OAuthConnectionConfig):
+            # Fetch a valid (auto-refreshed) OAuth token for this connection
+            connection_id = node.connection
+            if not connection_id:
+                raise ExecutionError("OAUTH_CONFIG_INVALID", "OAuth connection node has no connection_id")
+            access_token = await self._fetch_oauth_token(connection_id)
+            # Return the token so downstream nodes can use it
+            return {**input_data, "access_token": access_token, "connection_id": connection_id}
         return input_data
 
     async def _execute_http_connection(
@@ -619,8 +631,23 @@ class ProgramExecutor:
                 raise ConflictError(resource_id)
             # For queue/skip, we just proceed (best-effort locking for MVP)
 
-    async def _fetch_api_key(self, api_key_ref: str) -> str:
-        """Fetch the actual API key value from the Next.js internal vault endpoint."""
+    async def _fetch_oauth_token(self, connection_id: str) -> str:
+        """Fetch a valid (auto-refreshed) OAuth access token from Next.js."""
+        nextjs_url = os.environ.get("NEXTJS_INTERNAL_URL", "http://localhost:3000")
+        secret = os.environ["RUNTIME_SECRET"]
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                f"{nextjs_url}/api/internal/connections/{connection_id}/token",
+                headers={"x-runtime-secret": secret},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return str(data["access_token"])
+
+    async def _fetch_api_key(self, api_key_ref: str) -> tuple[str, str]:
+        """Fetch the API key value + provider from the Next.js internal vault endpoint.
+        Returns (value, provider).
+        """
         nextjs_url = os.environ.get("NEXTJS_INTERNAL_URL", "http://localhost:3000")
         secret = os.environ["RUNTIME_SECRET"]
         async with httpx.AsyncClient(timeout=10) as client:
@@ -629,7 +656,8 @@ class ProgramExecutor:
                 headers={"x-runtime-secret": secret},
             )
             resp.raise_for_status()
-            return str(resp.json()["value"])
+            data = resp.json()
+            return str(data["value"]), str(data.get("provider", ""))
 
     async def _with_retry(
         self,

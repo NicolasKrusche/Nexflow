@@ -183,12 +183,20 @@ async def get_credential(ref: str, user_id: str) -> dict:
 
 
 async def get_active_cron_workflows() -> list:
+    """Return programs whose trigger node type is trigger.cron."""
     db = get_db()
-    result = (
-        db.table("programs")
-        .select("*")
-        .eq("trigger_type", "trigger.cron")
-        .eq("status", "active")
-        .execute()
-    )
-    return result.data or []
+    result = db.table("programs").select("id, schema").execute()
+    rows = result.data or []
+    cron_workflows = []
+    for row in rows:
+        schema = row.get("schema") or {}
+        nodes = schema.get("nodes") or []
+        for node in nodes:
+            if node.get("type") == "trigger.cron":
+                config = node.get("config") or {}
+                cron_workflows.append({
+                    "id": row["id"],
+                    "cron_expression": config.get("cron_expression", "0 * * * *"),
+                })
+                break
+    return cron_workflows

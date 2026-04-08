@@ -84,7 +84,16 @@
       "Bash(mkdir -p \"H:/Archon/ARCHON_1/apps/web/app/api/internal/runs/[id]/complete\")",
       "Bash(mkdir -p \"H:/Archon/ARCHON_1/apps/web/app/api/programs/[id]/conflicts\")",
       "Bash(mkdir -p \"H:/Archon/ARCHON_1/apps/web/app/api/programs/[id]/execution-mode\")",
-      "WebFetch(domain:commons.wikimedia.org)"
+      "WebFetch(domain:commons.wikimedia.org)",
+      "Bash(python -c \"import sys; print\\(sys.version\\)\")",
+      "Bash(ls *.py)",
+      "Bash(ls n:/ai/apps/runtime/.env*)",
+      "Bash(python main.py)",
+      "Bash(python -c \"import main\")",
+      "Bash(python -m uvicorn main:app --host 0.0.0.0 --port 8000)",
+      "Bash(taskkill /PID 15908 /F)",
+      "Bash(powershell -Command \"Stop-Process -Id 15908 -Force\")",
+      "Bash(npx vitest:*)"
     ]
   }
 }

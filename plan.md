@@ -1763,20 +1763,20 @@ Silently deleting a connection programs depend on causes runtime failures that a
 **Goal:** Monorepo, auth, DB, staging deploy.
 
 ### Week 1
-- [ ] Init monorepo with pnpm + Turborepo
-- [ ] Create `apps/web` (Next.js 14, App Router, Tailwind, shadcn/ui)
-- [ ] Create `packages/schema` with all types + Zod validators
-- [ ] Create `packages/db` (Supabase client, typed)
-- [ ] Set up Supabase project (local dev + hosted)
-- [ ] Configure `.env.example` and all environment variables
+- [x] Init monorepo with pnpm + Turborepo
+- [x] Create `apps/web` (Next.js 14, App Router, Tailwind, shadcn/ui)
+- [x] Create `packages/schema` with all types + Zod validators
+- [x] Create `packages/db` (Supabase client, typed)
+- [x] Set up Supabase project (local dev + hosted)
+- [x] Configure `.env.example` and all environment variables
 
 ### Week 2
-- [ ] Write and apply all DB migrations from Section 4
-- [ ] Set up RLS policies
-- [ ] Configure Supabase Auth (email/password + Google OAuth)
-- [ ] Build auth pages: login, signup, forgot password, OAuth callback
-- [ ] Create Next.js middleware for protected routes
-- [ ] Run `supabase gen types` and wire into `packages/db`
+- [x] Write and apply all DB migrations from Section 4
+- [x] Set up RLS policies
+- [x] Configure Supabase Auth (email/password + Google OAuth)
+- [x] Build auth pages: login, signup, forgot password, OAuth callback
+- [x] Create Next.js middleware for protected routes
+- [x] Run `supabase gen types` and wire into `packages/db`
 - [ ] Deploy staging to Vercel
 
 **Milestone:** Login → dashboard, all tables exist with RLS.
@@ -1788,19 +1788,19 @@ Silently deleting a connection programs depend on causes runtime failures that a
 **Goal:** API key management, connection manager (Gmail OAuth), program genesis, schema validation.
 
 ### Week 3 — API Key Management
-- [ ] Build API key management UI (add, list, delete, validate)
-- [ ] Implement Supabase Vault write/read for key storage
-- [ ] Build server-side LiteLLM proxy (`/api/models/invoke` — key never leaves server)
-- [ ] Key validation endpoint (calls provider, returns valid/invalid + quota status)
-- [ ] Test with Anthropic, OpenAI, Google
+- [x] Build API key management UI (add, list, delete, validate)
+- [x] Implement Supabase Vault write/read for key storage
+- [ ] Build server-side LiteLLM proxy (`/api/models/invoke` — key never leaves server) ← skipped; runtime calls providers directly (OpenRouter/Anthropic/OpenAI)
+- [x] Key validation endpoint (calls provider, returns valid/invalid + quota status)
+- [x] Test with Anthropic, OpenAI, OpenRouter
 
 ### Week 4 — Connection Manager
-- [ ] Define `IConnector` interface (`packages/connectors-shared/base.ts`)
-- [ ] Implement Gmail OAuth connector (first full implementation)
-- [ ] OAuth callback → store tokens in Vault → create `connections` row
-- [ ] Connection management UI (list, add, test, remove)
-- [ ] Token refresh flow for expiring OAuth tokens
-- [ ] Connection test endpoint (live ping against provider)
+- [ ] Define `IConnector` interface (`packages/connectors-shared/base.ts`) ← skipped for now; OAuth only, no operation layer yet
+- [x] Implement Gmail OAuth connector (first full implementation)
+- [x] OAuth callback → store tokens in Vault → create `connections` row
+- [x] Connection management UI (list, add, test, remove) — includes logos
+- [x] Token refresh flow for expiring OAuth tokens (`lib/oauth-token.ts` + `/api/internal/connections/[id]/token`)
+- [x] Connection test endpoint (live ping against provider)
 
 ### Week 5 — Program Genesis
 
@@ -1929,13 +1929,13 @@ LLMs occasionally produce edges referencing non-existent node IDs or orphan node
 
 #### Implementation Tasks
 
-- [ ] Program creation UI (name, description, select allowed connections)
-- [ ] Genesis prompt + user message templates in `apps/web/lib/genesis/prompt.ts`
-- [ ] Genesis API route (`POST /api/genesis`): description + connections → LiteLLM → parse → validate
-- [ ] Handle `INSUFFICIENT_DESCRIPTION` and `MISSING_CONNECTIONS` error responses in UI
-- [ ] Parse and forward to schema validation engine on success
-- [ ] Store genesis output as version 0 in `program_versions`
-- [ ] Validation error display (inline indicators — full UI in Phase 2 editor)
+- [x] Program creation UI (name, description, select allowed connections)
+- [x] Genesis prompt + user message templates in `apps/web/lib/genesis/prompt.ts`
+- [x] Genesis API route (`POST /api/genesis`): description + connections → AI → parse → validate
+- [x] Handle `INSUFFICIENT_DESCRIPTION` and `MISSING_CONNECTIONS` error responses in UI
+- [x] Parse and forward to schema validation engine on success
+- [x] Store genesis output as version 0 in `program_versions`
+- [x] Validation error display (inline indicators — full UI in Phase 2 editor)
 
 **Milestone:** User describes a program, AI returns valid schema (or a specific, actionable error), errors surfaced before the editor loads.
 
@@ -1946,36 +1946,36 @@ LLMs occasionally produce edges referencing non-existent node IDs or orphan node
 **Goal:** Full React Flow editor with schema roundtrip, node config sidebar, versioning.
 
 ### Week 6 — React Flow + Translation Layer
-- [ ] Install and configure React Flow with custom theme
-- [ ] Implement `canonicalToReactFlow()` translator
-- [ ] Implement `reactFlowToCanonical()` translator
-- [ ] Roundtrip test: schema → RF → schema must be byte-identical (write tests)
-- [ ] Build custom node components: TriggerNode, AgentNode, StepNode, ConnectionNode
-- [ ] Render validation errors as red node borders with tooltips
+- [x] Install and configure React Flow with custom theme
+- [x] Implement `canonicalToReactFlow()` translator (`toReactFlow`)
+- [x] Implement `reactFlowToCanonical()` translator (`fromReactFlow`)
+- [x] Roundtrip test: schema → RF → schema must be byte-identical (17 tests covering all node/edge types, sentinels, versioning, metadata — all passing)
+- [x] Build custom node components: TriggerNode, AgentNode, StepNode, ConnectionNode
+- [x] Render validation errors as red node borders with tooltips
 
 ### Week 7 — Editor Interactions
-- [ ] Node add (drag from palette), remove
-- [ ] Edge add (connect handles), remove, rewire
-- [ ] Selection, multi-select
-- [ ] Copy/paste nodes
-- [ ] Minimap and zoom controls
-- [ ] Auto-layout (dagre) for freshly generated schemas
+- [x] Node add (toolbar buttons), remove (sidebar delete + Delete key)
+- [x] Edge add (connect handles), remove, rewire
+- [x] Selection
+- [x] Copy/paste nodes
+- [x] Minimap and zoom controls
+- [x] Auto-layout (dagre) for freshly generated schemas (`lib/schema/layout.ts`, applied in EditorShell on load)
 
 ### Week 8 — Node Configuration Sidebar
-- [ ] Sidebar panel opens on node click
-- [ ] AgentNode: model dropdown (from user's API keys), system prompt textarea, requires_approval toggle, retry config
-- [ ] TriggerNode: event selector, scope display
-- [ ] StepNode: operation type, expression editor
-- [ ] ConnectionNode: connection selector, operation, scope (read/write)
-- [ ] Sidebar changes update canonical schema immediately
+- [x] Sidebar panel opens on node click
+- [x] AgentNode: model dropdown (from user's API keys), system prompt textarea, requires_approval toggle, retry config
+- [x] TriggerNode: event selector, scope display
+- [x] StepNode: operation type, expression editor
+- [x] ConnectionNode: connection selector, operation, scope (read/write)
+- [x] Sidebar changes update canonical schema immediately
 
 ### Week 9 — Versioning, Auto-save, Mobile
-- [ ] Auto-save with 2-second debounce (schema diff → only save if changed)
-- [ ] Version history storage on every manual save
-- [ ] Version history UI: list versions, preview schema diff, rollback button
-- [ ] "Reset to genesis" shortcut (roll back to version 0)
-- [ ] Keyboard shortcuts (delete node, undo/redo via version stack)
-- [ ] Mobile mode: editor is read-only, all controls hidden, status badges visible
+- [x] Auto-save with 2-second debounce (schema diff → only save if changed)
+- [x] Version history storage on every manual save
+- [x] Version history UI: list versions, preview schema diff, rollback button
+- [x] "Reset to genesis" shortcut (roll back to version 0)
+- [x] Keyboard shortcuts (delete node, undo/redo, Cmd+S save)
+- [x] Mobile mode: editor is read-only, all controls hidden, status badges visible (isMobile check in EditorShell)
 
 **Milestone:** Full visual editing with roundtrip fidelity, versioning, mobile fallback.
 
@@ -1986,36 +1986,37 @@ LLMs occasionally produce edges referencing non-existent node IDs or orphan node
 **Goal:** Python LangGraph runtime, execution, live run logs, human approval.
 
 ### Week 10 — Python Runtime Setup
-- [ ] Create `apps/runtime` with FastAPI + Poetry
-- [ ] LangGraph environment setup
-- [ ] Schema parser: `ProgramSchema` JSON → LangGraph `StateGraph`
-- [ ] Basic `/execute` endpoint (accepts run_id + schema, starts execution)
-- [ ] Deploy to Railway, configure env vars
-- [ ] Internal auth between Next.js → Runtime (shared secret / JWT)
+- [x] Create `apps/runtime` with FastAPI + Poetry
+- [x] LangGraph environment setup
+- [x] Schema parser: `ProgramSchema` JSON → execution graph
+- [x] Basic `/execute` endpoint (accepts run_id + schema, starts execution)
+- [ ] Deploy to Railway, configure env vars ← running locally; Railway deploy pending
+- [x] Internal auth between Next.js → Runtime (shared secret via `x-runtime-secret`)
 
 ### Week 11 — Node Executors
-- [ ] `TriggerNodeExecutor` — receives trigger payload, passes to next node
-- [ ] `AgentNodeExecutor` — retrieves API key from Vault via server call, invokes LiteLLM
-- [ ] `StepNodeExecutor` — runs deterministic operations (transform, filter, branch)
-- [ ] `ConnectionNodeExecutor` — calls native connector by `connection_ref`
-- [ ] Edge routing: data_flow passes output as next input; control_flow evaluates condition
-- [ ] Retry logic with exponential/linear backoff per node config
+- [x] `TriggerNodeExecutor` — receives trigger payload, passes to next node
+- [x] `AgentNodeExecutor` — retrieves API key from vault endpoint, calls OpenRouter/Anthropic/OpenAI
+- [x] `StepNodeExecutor` — runs deterministic operations (transform, filter, branch)
+- [x] `ConnectionNodeExecutor` — HTTP connector (generic); native connector ops not yet wired
+- [x] Edge routing: data_flow passes output as next input; topological execution
+- [x] Retry logic with exponential/linear/none backoff per node config
 
 ### Week 12 — Run Logging & Live Updates
-- [ ] Write run + node_execution rows as execution progresses
-- [ ] Supabase Realtime subscription in frontend (live node status on diagram)
-- [ ] Node color states: grey (pending), yellow (running), green (completed), red (failed), blue (waiting_approval)
-- [ ] Run log timeline UI (per-node entries with timestamps, status, payloads)
-- [ ] Input/output payload inspector (expandable JSON viewer per node execution)
-- [ ] Dead-letter queue: failed nodes after max retries → `failed` status + notification
+- [x] Write run + node_execution rows as execution progresses
+- [x] Supabase Realtime subscription in frontend + 2s polling fallback
+- [x] Node status states: pending, running, completed, failed, waiting_approval, skipped
+- [x] Run log timeline UI (per-node entries with timestamps, status, payloads)
+- [x] Input/output payload inspector (expandable JSON viewer per node execution)
+- [x] Global Runs page (all programs, active + history, status filters, force stop)
+- [x] Dead-letter queue / in-app notification for failed runs (sidebar badge via `/api/runs/failed-count`, 7-day window)
 
 ### Week 13 — Human Approval Flow
-- [ ] AgentNode with `requires_approval: true` pauses execution, creates `approvals` row
-- [ ] Approval queue page (lists pending approvals with context)
-- [ ] Approve/reject UI with optional decision note
-- [ ] On approval: resume LangGraph execution from checkpoint
-- [ ] On rejection: node moves to `failed`, run halts or continues per config
-- [ ] In-app notification badge for pending approvals
+- [x] AgentNode with `requires_approval: true` pauses execution, creates `approvals` row
+- [x] Approval queue page (lists pending approvals with context)
+- [x] Approve/reject UI with optional decision note
+- [x] On approval: runtime polls and resumes execution
+- [x] On rejection: node moves to `skipped`, run continues per config
+- [x] In-app notification badge for pending approvals (sidebar badge via `/api/approvals`)
 
 **Milestone:** Programs execute end-to-end with live status, retry, and human approval.
 
@@ -2026,20 +2027,20 @@ LLMs occasionally produce edges referencing non-existent node IDs or orphan node
 **Goal:** All trigger types, inter-program triggers, conflict detection.
 
 ### Week 14 — Trigger Engine
-- [ ] Manual trigger (button in UI → POST to `/api/runs`)
-- [ ] Cron trigger via Inngest (store schedule → register Inngest function)
-- [ ] Inbound webhook trigger (generate unique URL per program, validate, fire)
-- [ ] Event trigger (connect to connection provider's webhook, fan-out to subscribed programs)
-- [ ] Inter-program trigger (Program A completion → fire Program B)
-- [ ] Trigger management UI (list active triggers, enable/disable, view history)
+- [x] Manual trigger (Run button in editor → POST to `/api/runs`)
+- [x] Cron trigger via APScheduler (loaded at runtime startup from schema JSON) ← Inngest not used
+- [x] Inbound webhook trigger (`/api/triggers/webhook/[token]`, unique opaque token per trigger)
+- [x] Event trigger (`/api/triggers/event` — matches source+event, fires all matching programs)
+- [x] Inter-program trigger (runtime calls `/api/internal/runs/[id]/complete` after each run; fires downstream `program_output` triggers)
+- [x] Trigger management UI (`/programs/[id]/triggers` — list, add, enable/disable, delete, copy webhook URL)
 
 ### Week 15 — Conflict Detection & Execution Controls
-- [ ] Resource locking: acquire lock on write-access connections at run start
-- [ ] Lock expiry + cleanup (stale lock detection)
-- [ ] Editor warning: two Programs with write access to same connection
-- [ ] Conflict resolution UI: queue / skip / fail policy per Program
-- [ ] Run cancellation (cancel in-progress run, release locks)
-- [ ] Execution mode switcher (autonomous / supervised / manual step-through)
+- [x] Resource locking: acquire lock on write-access connections at run start
+- [x] Lock expiry + cleanup (stale lock detection via `cleanup_stale_locks`)
+- [x] Editor warning: two Programs with write access to same connection (WARN_003 in `validatePostGenesis`)
+- [x] Conflict resolution UI: queue / skip / fail policy per Program (`/programs/[id]/conflicts`)
+- [x] Run cancellation (force stop button, marks cancelled, releases locks)
+- [x] Execution mode switcher UI (autonomous / supervised / manual) (`ExecutionControls` on program detail page)
 
 **Milestone:** All 5 trigger types working, conflict detection active.
 
@@ -2063,22 +2064,32 @@ interface IConnector {
 ```
 
 ### Week 16 — Gmail (deepen from Phase 1 stub)
-- [ ] Full operation set: read_email, send_email, list_threads, search, label, archive
-- [ ] Push notifications via Gmail watch API
-- [ ] Attachment handling
-- [ ] Rate limiting wrapper
+- [x] OAuth flow complete (scopes: readonly, send, modify)
+- [ ] Full operation set: read_email, send_email, list_threads, search, label, archive ← not yet
+- [ ] Push notifications via Gmail watch API ← not yet
+- [ ] Attachment handling ← not yet
+- [ ] Rate limiting wrapper ← not yet
 
 ### Week 17 — Notion
-- [ ] OAuth flow + token storage
-- [ ] Operations: read_page, append_to_page, create_page, create_database_entry, query_database
-- [ ] Webhook simulation (Notion has no webhooks — polling fallback with configurable interval)
+- [x] OAuth flow + token storage (Basic auth token exchange)
+- [ ] Operations: read_page, append_to_page, create_page, create_database_entry, query_database ← not yet
 
 ### Week 18 — Slack + GitHub
-- [ ] **Slack:** OAuth, send_message, read_channel, create_channel, Event API webhooks
-- [ ] **GitHub:** OAuth + PAT support, create_issue, comment, list_prs, push_file, webhook events
+- [x] **Slack:** OAuth flow complete
+- [ ] **Slack:** send_message, read_channel, create_channel, Event API webhooks ← not yet
+- [x] **GitHub:** OAuth flow complete
+- [ ] **GitHub:** create_issue, comment, list_prs, push_file, webhook events ← not yet
+
+### Week 18b — Additional OAuth flows (added beyond original plan)
+- [x] Airtable OAuth (PKCE flow)
+- [x] HubSpot OAuth
+- [x] Asana OAuth
+- [x] Microsoft Outlook OAuth
+- [x] Typeform OAuth
+- [x] Google Sheets / Calendar / Docs / Drive OAuth (shared Google handler)
 
 ### Week 19 — Google Sheets
-- [ ] OAuth (shares Google consent screen with Gmail)
+- [x] OAuth (shares Google consent screen — single handler for all Google services)
 - [ ] Operations: read_range, write_range, append_row, create_sheet, clear_range
 - [ ] Change detection via Sheets push notifications
 
@@ -2091,10 +2102,10 @@ interface IConnector {
 **Goal:** Pre-flight check system, dry-run simulation, PWA, billing, end-to-end QA.
 
 ### Week 20 — Pre-flight Check System
-- [ ] Implement `validatePreFlight()` (see [Section 6 — Validation Layer](#6-validation-layer)): PRE_001 OAuth token check, PRE_002 API key probe, PRE_003 scope check, PRE_004 sentinel check — all run in parallel
-- [ ] Pre-flight results UI: checklist mapping each PRE_* rule to green tick / red failure
-- [ ] Block execution (`Run` button disabled) if any PRE_* errors present
-- [ ] `fix_suggestion` deep links from each failure to the relevant settings page
+- [x] Implement `validatePreFlight()`: PRE_001–PRE_004 checks, runs before every execution
+- [x] Block execution (`Run` button disabled / 422 returned) if any PRE_* errors present
+- [ ] Pre-flight results UI: checklist mapping each PRE_* rule to green tick / red failure ← errors shown inline but no dedicated checklist UI
+- [ ] `fix_suggestion` deep links from each failure to the relevant settings page ← not yet
 
 ### Week 21 — PWA + Billing
 

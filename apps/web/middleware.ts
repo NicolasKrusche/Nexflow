@@ -4,11 +4,19 @@ import type { Database } from "@flowos/db";
 
 const PUBLIC_ROUTES = ["/login", "/signup", "/forgot-password", "/auth/callback"];
 
+// Internal API routes authenticated by x-runtime-secret — never redirect these to login
+const INTERNAL_API_PREFIX = "/api/internal/";
+
 export async function middleware(request: NextRequest) {
   // If Supabase isn't configured yet, allow all public routes through
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const { pathname } = request.nextUrl;
+
+  // Internal API routes authenticate via x-runtime-secret — skip session check
+  if (pathname.startsWith(INTERNAL_API_PREFIX)) {
+    return NextResponse.next({ request });
+  }
 
   const isPublic = PUBLIC_ROUTES.some((r) => pathname.startsWith(r));
 

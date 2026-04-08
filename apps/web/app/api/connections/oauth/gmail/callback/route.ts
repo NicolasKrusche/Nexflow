@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceClient, apiError } from "@/lib/api";
-import { vaultStore } from "@/lib/vault";
+import { storeOAuthTokens } from "@/lib/oauth-token";
 
 // GET /api/connections/oauth/gmail/callback
 export async function GET(request: Request) {
@@ -56,9 +56,9 @@ export async function GET(request: Request) {
   const serviceClient = createServiceClient();
   let vaultId: string;
   try {
-    vaultId = await vaultStore(
+    vaultId = await storeOAuthTokens(
       serviceClient,
-      JSON.stringify(tokens),
+      tokens,
       `oauth:${userId}:gmail:${label}`,
       `Gmail OAuth tokens for user ${userId}`
     );

@@ -10,7 +10,6 @@ import { cn } from "@/lib/utils";
 const STATIC_NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: GridIcon },
   { href: "/programs/new", label: "New Program", icon: PlusIcon },
-  { href: "/runs", label: "Runs", icon: RunsIcon },
   { href: "/connections", label: "Connections", icon: LinkIcon },
 ];
 
@@ -19,6 +18,7 @@ const STATIC_NAV_ITEMS = [
 export function Sidebar() {
   const pathname = usePathname();
   const [pendingApprovals, setPendingApprovals] = useState(0);
+  const [failedRuns, setFailedRuns] = useState(0);
 
   // Fetch pending approval count client-side
   useEffect(() => {
@@ -28,18 +28,27 @@ export function Sidebar() {
         const res = await fetch("/api/approvals");
         if (!res.ok) return;
         const data = (await res.json()) as { approvals: unknown[] };
-        if (!cancelled) {
-          setPendingApprovals(data.approvals?.length ?? 0);
-        }
-      } catch {
-        // Silently ignore — badge just won't show
-      }
+        if (!cancelled) setPendingApprovals(data.approvals?.length ?? 0);
+      } catch { /* badge won't show */ }
     }
     void fetchCount();
-    return () => {
-      cancelled = true;
-    };
-  }, [pathname]); // Re-fetch when navigation happens
+    return () => { cancelled = true; };
+  }, [pathname]);
+
+  // Fetch failed run count client-side
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchFailed() {
+      try {
+        const res = await fetch("/api/runs/failed-count");
+        if (!res.ok) return;
+        const data = (await res.json()) as { count: number };
+        if (!cancelled) setFailedRuns(data.count ?? 0);
+      } catch { /* badge won't show */ }
+    }
+    void fetchFailed();
+    return () => { cancelled = true; };
+  }, [pathname]);
 
   return (
     <aside className="fixed left-0 top-0 h-full w-56 bg-card border-r border-border flex flex-col z-40">
@@ -70,6 +79,30 @@ export function Sidebar() {
             </Link>
           );
         })}
+
+        {/* Runs — with failed-run notification badge */}
+        {(() => {
+          const active = pathname.startsWith("/runs");
+          return (
+            <Link
+              href="/runs"
+              className={cn(
+                "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                active
+                  ? "bg-accent text-accent-foreground"
+                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              )}
+            >
+              <RunsIcon className="w-4 h-4 shrink-0" />
+              <span className="flex-1">Runs</span>
+              {failedRuns > 0 && (
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold shrink-0">
+                  {failedRuns > 99 ? "99+" : failedRuns}
+                </span>
+              )}
+            </Link>
+          );
+        })()}
 
         {/* Approvals — with notification badge */}
         {(() => {

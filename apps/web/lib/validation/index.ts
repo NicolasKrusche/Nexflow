@@ -149,6 +149,31 @@ export function validatePostGenesis(
       warning("WARN_002", node.id, `${node.label} has no system prompt`, "Add a system prompt to define what this agent should do");
   });
 
+  // ─── WARN_003: multiple write-access nodes sharing the same connection ────
+
+  const writeNodesByConnection = new Map<string, string[]>();
+  nodes.forEach((node) => {
+    if (!node.connection) return;
+    const config = (node as AgentNode).config;
+    const scopeAccess = "scope_access" in config ? config.scope_access : null;
+    if (scopeAccess === "write" || scopeAccess === "read_write") {
+      const existing = writeNodesByConnection.get(node.connection) ?? [];
+      writeNodesByConnection.set(node.connection, [...existing, node.id]);
+    }
+  });
+  writeNodesByConnection.forEach((nodeIds, connectionName) => {
+    if (nodeIds.length > 1) {
+      nodeIds.forEach((nodeId) => {
+        warning(
+          "WARN_003",
+          nodeId,
+          `Multiple nodes write to "${connectionName}" — possible concurrency conflict`,
+          "Consider adding a step node to serialize writes, or split into separate programs"
+        );
+      });
+    }
+  });
+
   // ─── Build node_states ──────────────────────────────────────────────────
 
   const node_states: Record<string, NodeValidationState> = {};

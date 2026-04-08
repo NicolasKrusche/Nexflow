@@ -55,29 +55,37 @@ async def trigger_workflow(workflow_id: str) -> None:
     )
     run_id = run_result.data[0]["id"]
     user_id = program_data.get("user_id", "")
+    final_status = "failed"
     executor = ProgramExecutor(schema, run_id, user_id)
     try:
         await executor.execute(None)
+        final_status = "completed"
         await update_run(db, run_id, status="completed", completed_at="now()")
     except ExecutionError as e:
         await update_run(db, run_id, status="failed", error_message=e.message, completed_at="now()")
     except Exception as e:
         await update_run(db, run_id, status="failed", error_message=str(e), completed_at="now()")
+    finally:
+        await release_run_locks(db, run_id)
+        await _notify_complete(run_id, workflow_id, user_id, final_status)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    workflows = await get_active_cron_workflows()
-    for w in workflows:
-        try:
-            scheduler.add_job(
-                trigger_workflow,
-                "cron",
-                **parse_cron(w.get("cron_expression", "0 * * * *")),
-                args=[w["id"]],
-            )
-        except ValueError:
-            pass  # Skip workflows with invalid cron expressions
+    try:
+        workflows = await get_active_cron_workflows()
+        for w in workflows:
+            try:
+                scheduler.add_job(
+                    trigger_workflow,
+                    "cron",
+                    **parse_cron(w.get("cron_expression", "0 * * * *")),
+                    args=[w["id"]],
+                )
+            except ValueError:
+                pass  # Skip workflows with invalid cron expressions
+    except Exception as e:
+        print(f"[runtime] Warning: could not load cron workflows: {e}")
     scheduler.start()
     yield
     scheduler.shutdown(wait=False)
@@ -125,6 +133,22 @@ async def execute_program(
 RUN_TIMEOUT_SECONDS = 600  # 10 minutes max per run
 
 
+async def _notify_complete(run_id: str, program_id: str, user_id: str, status: str) -> None:
+    """Notify Next.js that a run has finished — fires inter-program triggers."""
+    nextjs_url = os.environ.get("NEXTJS_INTERNAL_URL", "http://localhost:3000")
+    secret = os.environ.get("RUNTIME_SECRET", "")
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.post(
+                f"{nextjs_url}/api/internal/runs/{run_id}/complete",
+                headers={"x-runtime-secret": secret, "Content-Type": "application/json"},
+                json={"program_id": program_id, "user_id": user_id, "status": status},
+            )
+    except Exception as e:
+        print(f"[runtime] Warning: could not notify completion for run {run_id}: {e}")
+
+
 async def _run_program(
     schema: ProgramSchema,
     run_id: str,
@@ -132,9 +156,11 @@ async def _run_program(
     trigger_payload: Optional[dict[str, Any]],
 ) -> None:
     db = get_db()
+    final_status = "failed"
     try:
         executor = ProgramExecutor(schema, run_id, user_id)
         await asyncio.wait_for(executor.execute(trigger_payload), timeout=RUN_TIMEOUT_SECONDS)
+        final_status = "completed"
         await update_run(db, run_id, status="completed", completed_at="now()")
     except asyncio.TimeoutError:
         await update_run(
@@ -152,6 +178,8 @@ async def _run_program(
         )
     finally:
         await release_run_locks(db, run_id)
+        # Notify Next.js — fires inter-program triggers for completed runs
+        await _notify_complete(run_id, schema.program_id, user_id, final_status)
 
 
 @app.get("/health")

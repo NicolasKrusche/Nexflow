@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/api";
-import { vaultStore } from "@/lib/vault";
+import { storeOAuthTokens } from "@/lib/oauth-token";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -43,9 +43,9 @@ export async function GET(request: Request) {
   const serviceClient = createServiceClient();
   let vaultId: string;
   try {
-    vaultId = await vaultStore(
+    vaultId = await storeOAuthTokens(
       serviceClient,
-      JSON.stringify({ access_token: botToken, team: tokens.team }),
+      { access_token: botToken, team: tokens.team },
       `oauth:${userId}:slack:${label}`,
       `Slack OAuth tokens for user ${userId}`
     );

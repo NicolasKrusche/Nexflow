@@ -24,11 +24,11 @@ export async function GET(
   const serviceClient = createServiceClient();
 
   // Look up the api_key row to get vault_secret_id
-  type ApiKeyRow = { id: string; vault_secret_id: string | null };
+  type ApiKeyRow = { id: string; provider: string; vault_secret_id: string | null };
 
   const { data: rawRow, error: keyError } = await serviceClient
     .from("api_keys")
-    .select("id, vault_secret_id")
+    .select("id, provider, vault_secret_id")
     .eq("id", ref)
     .single();
 
@@ -50,5 +50,5 @@ export async function GET(
     return apiError("Failed to retrieve secret from vault", 500);
   }
 
-  return NextResponse.json({ value });
+  return NextResponse.json({ value, provider: row.provider });
 }

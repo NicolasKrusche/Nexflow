@@ -152,7 +152,6 @@ export default async function RunLogPage({
         </p>
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold">Run log</h1>
-          <StatusBadge status={run.status} />
           {["running", "waiting_approval", "pending"].includes(run.status) && (
             <StopRunButton runId={run.id} />
           )}
