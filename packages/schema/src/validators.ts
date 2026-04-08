@@ -156,6 +156,8 @@ export const ConnectionNodeZ = NodeBaseZ.extend({
       connector_type: z.literal("oauth").optional(),
       scope_access: z.enum(["read", "write", "read_write"]),
       scope_required: z.array(z.string()),
+      operation: z.string().optional(),
+      operation_params: z.record(z.unknown()).optional(),
     }),
     z.object({
       connector_type: z.literal("http"),

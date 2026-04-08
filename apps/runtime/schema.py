@@ -43,6 +43,8 @@ class OAuthConnectionConfig:
     scope_access: str
     scope_required: list[str]
     connector_type: Literal["oauth"] = "oauth"
+    operation: Optional[str] = None
+    operation_params: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -186,6 +188,8 @@ def _parse_node_config(
             connector_type="oauth",
             scope_access=raw.get("scope_access", "read"),
             scope_required=list(raw.get("scope_required") or []),
+            operation=raw.get("operation"),
+            operation_params=dict(raw.get("operation_params") or {}),
         )
     else:
         return TriggerConfig(trigger_type="manual")

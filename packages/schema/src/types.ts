@@ -124,6 +124,10 @@ export interface OAuthConnectionConfig {
   connector_type?: "oauth";
   scope_access: "read" | "write" | "read_write";
   scope_required: string[];
+  // Native connector operation to execute (e.g. "send_email", "read_range").
+  // If omitted the node just surfaces the access token to downstream nodes.
+  operation?: string;
+  operation_params?: Record<string, unknown>;
 }
 
 export type HttpAuthType =
