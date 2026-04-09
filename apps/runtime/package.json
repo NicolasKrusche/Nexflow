@@ -1,0 +1,8 @@
+{
+  "name": "@flowos/runtime",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "uvicorn main:app --port 8000 --reload"
+  }
+}

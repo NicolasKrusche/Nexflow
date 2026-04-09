@@ -66,50 +66,82 @@ export async function POST(request: Request) {
   // Call the model — use OpenAI-compatible SDK for OpenRouter/OpenAI/etc, Anthropic SDK for Anthropic
   const useAnthropicSDK = apiKeyRow.provider === "anthropic";
 
-  let rawText: string;
-  try {
-    if (useAnthropicSDK) {
-      const anthropic = new Anthropic({ apiKey: anthropicApiKey });
-      const msg = await anthropic.messages.create({
-        model,
-        max_tokens: 4096,
-        system: GENESIS_SYSTEM_PROMPT,
-        messages: [{ role: "user", content: buildGenesisUserMessage(description, availableConnections) }],
-      });
-      rawText = msg.content[0]?.type === "text" ? (msg.content[0] as { type: "text"; text: string }).text : "";
-    } else {
-      const baseURL = apiKeyRow.provider === "openrouter"
-        ? "https://openrouter.ai/api/v1"
-        : apiKeyRow.provider === "openai"
-          ? "https://api.openai.com/v1"
-          : apiKeyRow.provider === "groq"
-            ? "https://api.groq.com/openai/v1"
-            : apiKeyRow.provider === "mistral"
-              ? "https://api.mistral.ai/v1"
-              : undefined;
+  // Transient provider errors that are safe to retry (OpenRouter 524 timeout, 529 overloaded, etc.)
+  const isRetryable = (err: unknown): boolean => {
+    const msg = err instanceof Error ? err.message : String(err);
+    return (
+      msg.includes("524") ||
+      msg.includes("529") ||
+      msg.includes("Provider returned error") ||
+      msg.includes("overloaded") ||
+      msg.includes("timeout") ||
+      msg.includes("ECONNRESET") ||
+      msg.includes("ETIMEDOUT")
+    );
+  };
 
-      const openai = new OpenAI({ apiKey: anthropicApiKey, ...(baseURL && { baseURL }) });
-      const msg = await openai.chat.completions.create({
-        model,
-        max_tokens: 4096,
-        messages: [
-          { role: "system", content: GENESIS_SYSTEM_PROMPT },
-          { role: "user", content: buildGenesisUserMessage(description, availableConnections) },
-        ],
-      });
-      // Some OpenRouter models return choices=undefined or an empty array on failure
-      if (!msg.choices?.length) {
-        const hint = (msg as unknown as Record<string, unknown>).error;
-        throw new Error(
-          hint
-            ? `OpenRouter error: ${JSON.stringify(hint)}`
-            : `Model returned no choices (model="${model}" may be unavailable or rate-limited)`
-        );
+  let rawText: string;
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      if (useAnthropicSDK) {
+        const anthropic = new Anthropic({ apiKey: anthropicApiKey });
+        const msg = await anthropic.messages.create({
+          model,
+          max_tokens: 4096,
+          system: GENESIS_SYSTEM_PROMPT,
+          messages: [{ role: "user", content: buildGenesisUserMessage(description, availableConnections) }],
+        });
+        rawText = msg.content[0]?.type === "text" ? (msg.content[0] as { type: "text"; text: string }).text : "";
+      } else {
+        const baseURL = apiKeyRow.provider === "openrouter"
+          ? "https://openrouter.ai/api/v1"
+          : apiKeyRow.provider === "openai"
+            ? "https://api.openai.com/v1"
+            : apiKeyRow.provider === "groq"
+              ? "https://api.groq.com/openai/v1"
+              : apiKeyRow.provider === "mistral"
+                ? "https://api.mistral.ai/v1"
+                : undefined;
+
+        const openai = new OpenAI({ apiKey: anthropicApiKey, ...(baseURL && { baseURL }), timeout: 120_000 });
+        const msg = await openai.chat.completions.create({
+          model,
+          max_tokens: 4096,
+          messages: [
+            { role: "system", content: GENESIS_SYSTEM_PROMPT },
+            { role: "user", content: buildGenesisUserMessage(description, availableConnections) },
+          ],
+        });
+        // Some OpenRouter models return choices=undefined or an empty array on failure
+        if (!msg.choices?.length) {
+          const raw = msg as unknown as Record<string, unknown>;
+          const hint = raw.error ?? raw.detail ?? raw.message;
+          const errMsg = hint
+            ? `OpenRouter error: ${typeof hint === "object" ? JSON.stringify(hint) : hint}`
+            : `Model returned no choices (model="${model}" may be unavailable or rate-limited). Full response: ${JSON.stringify(raw).slice(0, 400)}`;
+          const e = new Error(errMsg);
+          if (isRetryable(e) && attempt < 3) {
+            lastErr = e;
+            await new Promise((r) => setTimeout(r, attempt * 2000));
+            continue;
+          }
+          throw e;
+        }
+        rawText = msg.choices[0].message?.content ?? "";
       }
-      rawText = msg.choices[0].message?.content ?? "";
+      break; // success
+    } catch (err) {
+      lastErr = err;
+      if (isRetryable(err) && attempt < 3) {
+        await new Promise((r) => setTimeout(r, attempt * 2000));
+        continue;
+      }
+      return apiError(`Genesis model call failed: ${(err as Error).message}`, 502);
     }
-  } catch (err) {
-    return apiError(`Genesis model call failed: ${(err as Error).message}`, 502);
+  }
+  if (!rawText!) {
+    return apiError(`Genesis model call failed after 3 attempts: ${(lastErr as Error)?.message ?? "empty response"}`, 502);
   }
 
   // Strip markdown code fences if the model wrapped the JSON (common with non-Anthropic models)
@@ -186,18 +218,20 @@ export async function POST(request: Request) {
 
   // Link connections
   if (connection_ids.length > 0) {
-    await supabase.from("program_connections").insert(
+    const { error: connLinkErr } = await supabase.from("program_connections").insert(
       connection_ids.map((cid) => ({ program_id: program.id, connection_id: cid }))
     );
+    if (connLinkErr) console.error("[genesis] Failed to link connections:", connLinkErr.message);
   }
 
   // Store genesis snapshot as version 0
-  await supabase.from("program_versions").insert({
+  const { error: versionErr } = await supabase.from("program_versions").insert({
     program_id: program.id,
     version: 0,
     schema: schema as unknown as Record<string, unknown>,
     change_summary: "Genesis — AI-generated from description",
   });
+  if (versionErr) console.error("[genesis] Failed to store version snapshot:", versionErr.message);
 
   return NextResponse.json({ program, schema, validation }, { status: 201 });
 }
@@ -242,6 +276,44 @@ function normalizeDataSchema(schema: unknown): void {
   if (s.items) normalizeDataSchema(s.items);
 }
 
+const VALID_NODE_TYPES = new Set(["trigger", "agent", "step", "connection"]);
+
+// Maps unrecognized node type strings to valid ones
+const NODE_TYPE_MAP: Record<string, string> = {
+  action: "connection",
+  connector: "connection",
+  integration: "connection",
+  api: "connection",
+  service: "connection",
+  decision: "step",
+  condition: "step",
+  filter_node: "step",
+  loop: "step",
+  transform_node: "step",
+  branch_node: "step",
+  schedule: "trigger",
+  scheduled: "trigger",
+  cron: "trigger",
+  timer: "trigger",
+  webhook: "trigger",
+  llm: "agent",
+  ai: "agent",
+  model: "agent",
+  assistant: "agent",
+  task: "step",
+  router: "step",
+  switcher: "step",
+  mapper: "step",
+};
+
+function inferNodeType(config: Record<string, unknown>): string | null {
+  if ("trigger_type" in config) return "trigger";
+  if ("logic_type" in config) return "step";
+  if ("model" in config && "system_prompt" in config) return "agent";
+  if ("scope_access" in config || "connector_type" in config) return "connection";
+  return null;
+}
+
 function normalizeSchema(raw: unknown): void {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return;
   const schema = raw as Record<string, unknown>;
@@ -251,6 +323,17 @@ function normalizeSchema(raw: unknown): void {
     for (const node of schema.nodes) {
       if (!node || typeof node !== "object") continue;
       const n = node as Record<string, unknown>;
+
+      // Fix unrecognized node types
+      if (typeof n.type === "string" && !VALID_NODE_TYPES.has(n.type)) {
+        const mapped = NODE_TYPE_MAP[n.type.toLowerCase()];
+        if (mapped) {
+          n.type = mapped;
+        } else if (n.config && typeof n.config === "object") {
+          const inferred = inferNodeType(n.config as Record<string, unknown>);
+          if (inferred) n.type = inferred;
+        }
+      }
 
       // Fix trigger config — models often omit trigger_type or use wrong field names
       if (n.type === "trigger" && n.config && typeof n.config === "object") {
@@ -315,12 +398,13 @@ function normalizeSchema(raw: unknown): void {
         normalizeDataSchema(cfg.output_schema);
       }
 
-      // Fix DataSchema on step nodes
+      // Fix DataSchema on step nodes; also enforce connection: null (required by schema)
       if (n.type === "step" && n.config && typeof n.config === "object") {
         const cfg = n.config as Record<string, unknown>;
         normalizeDataSchema(cfg.input_schema);
         normalizeDataSchema(cfg.output_schema);
         normalizeDataSchema(cfg.pass_schema);
+        n.connection = null;
       }
 
       // Normalize connection node config
@@ -336,6 +420,11 @@ function normalizeSchema(raw: unknown): void {
           cfg.scope_required = [cfg.scope_required];
         } else if (!Array.isArray(cfg.scope_required)) {
           cfg.scope_required = [];
+        }
+        // Ensure scope_access has a valid value (required by OAuth branch)
+        const validScopeAccess = new Set(["read", "write", "read_write"]);
+        if (!cfg.scope_access || !validScopeAccess.has(cfg.scope_access as string)) {
+          cfg.scope_access = "read_write";
         }
         // Strip empty operation/operation_params so optional fields are truly absent
         if (cfg.operation === "" || cfg.operation === null) delete cfg.operation;

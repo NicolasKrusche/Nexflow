@@ -54,17 +54,51 @@ function StatusBadge({ status }: { status: string }) {
 
 // ─── JSON collapsible viewer ──────────────────────────────────────────────────
 
-function JsonViewer({ label, data }: { label: string; data: unknown }) {
+function JsonViewer({ label, data, defaultOpen = false }: { label: string; data: unknown; defaultOpen?: boolean }) {
   if (data == null) return null;
+  const text = JSON.stringify(data, null, 2);
   return (
-    <details className="mt-1">
+    <details className="mt-1" open={defaultOpen}>
       <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground select-none">
         {label}
       </summary>
-      <pre className="mt-1 p-2 rounded bg-muted text-xs overflow-x-auto max-h-48">
-        {JSON.stringify(data, null, 2)}
+      <pre className="mt-1 p-2 rounded bg-muted text-xs overflow-x-auto max-h-64 whitespace-pre-wrap break-all">
+        {text}
       </pre>
     </details>
+  );
+}
+
+// ─── Error detail block ───────────────────────────────────────────────────────
+
+function ErrorBlock({ message }: { message: string }) {
+  const copyToClipboard = () => navigator.clipboard?.writeText(message).catch(() => {});
+  // Parse out a code prefix like [OAUTH_TOKEN_FAILED] if present
+  const codeMatch = message.match(/^\[([A-Z_]+)\]\s*/);
+  const code = codeMatch?.[1];
+  const body = codeMatch ? message.slice(codeMatch[0].length) : message;
+
+  return (
+    <div className="mt-2 rounded border border-destructive/40 bg-destructive/5 p-3 space-y-1">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {code && (
+            <span className="font-mono text-[10px] font-semibold bg-destructive/15 text-destructive px-1.5 py-0.5 rounded">
+              {code}
+            </span>
+          )}
+        </div>
+        <button
+          onClick={copyToClipboard}
+          className="shrink-0 text-[10px] text-muted-foreground hover:text-foreground border border-border rounded px-1.5 py-0.5"
+        >
+          Copy
+        </button>
+      </div>
+      <pre className="text-xs text-destructive font-mono whitespace-pre-wrap break-all leading-relaxed">
+        {body}
+      </pre>
+    </div>
   );
 }
 
@@ -189,14 +223,16 @@ export function RunLogLive({
             const node = nodeMap[exec.node_id];
             const label = node?.label ?? exec.node_id;
             const duration = formatDuration(exec.started_at, exec.completed_at);
+            const isFailed = exec.status === "failed";
 
             return (
               <div
                 key={exec.id}
-                className="rounded-lg border border-border p-4 space-y-2"
+                className={`rounded-lg border p-4 space-y-2 ${isFailed ? "border-destructive/50" : "border-border"}`}
               >
+                {/* Header row */}
                 <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <StatusBadge status={exec.status} />
                     <span className="text-sm font-medium">{label}</span>
                     {node && (
@@ -205,27 +241,31 @@ export function RunLogLive({
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-muted-foreground shrink-0">
+                  <div className="text-xs text-muted-foreground shrink-0 text-right">
                     {exec.started_at
                       ? `${new Date(exec.started_at).toLocaleTimeString()} · ${duration}`
                       : "—"}
                   </div>
                 </div>
 
-                {exec.error_message && (
-                  <p className="text-xs text-destructive font-mono">
-                    {exec.error_message}
-                  </p>
-                )}
+                {/* Node ID (always visible for debugging) */}
+                <p className="text-[10px] text-muted-foreground font-mono">
+                  node: {exec.node_id}
+                </p>
 
+                {/* Retry info */}
                 {exec.retry_count != null && exec.retry_count > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    Retried {exec.retry_count} time{exec.retry_count !== 1 ? "s" : ""}
+                  <p className="text-xs text-yellow-600 dark:text-yellow-400">
+                    ⟳ Retried {exec.retry_count} time{exec.retry_count !== 1 ? "s" : ""}
                   </p>
                 )}
 
-                <JsonViewer label="Input" data={exec.input_payload} />
-                <JsonViewer label="Output" data={exec.output_payload} />
+                {/* Error — full detail, never truncated */}
+                {exec.error_message && <ErrorBlock message={exec.error_message} />}
+
+                {/* Input / Output — open by default when failed so context is immediate */}
+                <JsonViewer label="▸ Input" data={exec.input_payload} defaultOpen={isFailed} />
+                <JsonViewer label="▸ Output" data={exec.output_payload} />
               </div>
             );
           })}

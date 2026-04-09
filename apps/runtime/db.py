@@ -32,11 +32,15 @@ async def create_run(
         )
         .execute()
     )
+    if not result.data:
+        raise RuntimeError("DB insert for run returned no data — possible constraint violation")
     return result.data[0]
 
 
 async def update_run(db: Client, run_id: str, **kwargs: Any) -> None:
-    db.table("runs").update(kwargs).eq("id", run_id).execute()
+    result = db.table("runs").update(kwargs).eq("id", run_id).execute()
+    if hasattr(result, "error") and result.error:
+        print(f"[db] WARNING: update_run failed for run {run_id}: {result.error}", flush=True)
 
 
 async def get_run_status(db: Client, run_id: str) -> str:
@@ -63,19 +67,23 @@ async def create_node_execution(db: Client, run_id: str, node_id: str) -> dict:
         )
         .execute()
     )
+    if not result.data:
+        raise RuntimeError(f"DB insert for node_execution (run={run_id}, node={node_id}) returned no data")
     return result.data[0]
 
 
 async def update_node_execution(
     db: Client, run_id: str, node_id: str, **kwargs: Any
 ) -> None:
-    (
+    result = (
         db.table("node_executions")
         .update(kwargs)
         .eq("run_id", run_id)
         .eq("node_id", node_id)
         .execute()
     )
+    if hasattr(result, "error") and result.error:
+        print(f"[db] WARNING: update_node_execution failed (run={run_id}, node={node_id}): {result.error}", flush=True)
 
 
 async def create_approval(
@@ -93,6 +101,8 @@ async def create_approval(
         )
         .execute()
     )
+    if not result.data:
+        raise RuntimeError(f"DB insert for approval (node_exec={node_execution_id}) returned no data")
     return result.data[0]
 
 
@@ -138,9 +148,13 @@ async def acquire_resource_lock(
             .execute()
         )
         return len(result.data) > 0
-    except Exception:
-        # Unique constraint violation = lock already held
-        return False
+    except Exception as e:
+        err_str = str(e).lower()
+        # Unique constraint violation = lock already held by another run — expected, return False
+        if "unique" in err_str or "duplicate" in err_str or "23505" in err_str:
+            return False
+        # Any other DB error (connection failure, permission, etc.) must propagate
+        raise RuntimeError(f"acquire_resource_lock failed unexpectedly for {resource_type}/{resource_id}: {e}") from e
 
 
 async def release_run_locks(db: Client, run_id: str) -> None:

@@ -38,19 +38,51 @@ from db import (
 )
 
 
+def _resolve_path(expr: str, data: Any) -> Any:
+    """Walk a dot-separated path with optional array indices like emails[0].id."""
+    parts = re.split(r"\.", expr)
+    val = data
+    for part in parts:
+        arr_match = re.match(r"^(\w+)\[(\d+)\]$", part)
+        if arr_match:
+            key, idx = arr_match.group(1), int(arr_match.group(2))
+            if isinstance(val, dict):
+                val = val.get(key)
+            if isinstance(val, list):
+                val = val[idx] if idx < len(val) else None
+            else:
+                return None
+        elif isinstance(val, dict):
+            val = val.get(part)
+        else:
+            return None
+    return val
+
+
 def _resolve_expressions(template: str, inputs: dict) -> str:
-    """Replace {{key}} and {{node_id.field}} expressions with values from inputs."""
+    """Replace {{key}} and {{node_id.field[0].sub}} expressions with values from inputs.
+    Unresolved expressions resolve to empty string — never to the raw template literal.
+    """
     def replacer(match: re.Match) -> str:
         expr = match.group(1).strip()
-        parts = expr.split(".")
-        val: Any = inputs
-        for part in parts:
-            if isinstance(val, dict):
-                val = val.get(part, match.group(0))
-            else:
-                return match.group(0)
-        return str(val)
+        result = _resolve_path(expr, inputs)
+        if result is None:
+            return ""
+        if isinstance(result, (dict, list)):
+            return json.dumps(result)
+        return str(result)
     return re.sub(r"\{\{([^}]+)\}\}", replacer, template)
+
+
+def _resolve_nested(value: Any, inputs: dict) -> Any:
+    """Recursively resolve {{expressions}} inside nested dicts and lists."""
+    if isinstance(value, str):
+        return _resolve_expressions(value, inputs)
+    if isinstance(value, dict):
+        return {k: _resolve_nested(v, inputs) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_resolve_nested(item, inputs) for item in value]
+    return value
 
 
 async def run_agent(config: dict, inputs: dict, credentials: Any) -> dict:
@@ -297,6 +329,8 @@ class ProgramExecutor:
 
     async def _call_llm(self, cfg: AgentConfig, api_key: str, provider: str, input_data: dict) -> dict:
         """Call the LLM via LiteLLM-compatible API."""
+        if not api_key:
+            raise ExecutionError("API_KEY_MISSING", f"No API key available for provider '{provider}' — check your key configuration")
         litellm_url = os.environ.get("LITELLM_URL")
 
         PROVIDER_URLS: dict[str, str] = {
@@ -352,8 +386,17 @@ class ProgramExecutor:
                         f"LLM API error {resp.status_code} from {base_url} "
                         f"(model={cfg.model}): {resp.text[:500]}"
                     )
-                data = resp.json()
-                content = data["content"][0]["text"] if data.get("content") else ""
+                try:
+                    data = resp.json()
+                except Exception as parse_err:
+                    raise Exception(f"LLM returned non-JSON response (model={cfg.model}): {resp.text[:300]}") from parse_err
+                content_list = data.get("content") or []
+                if not content_list:
+                    raise Exception(f"LLM returned empty content (model={cfg.model}). Full response: {resp.text[:500]}")
+                first = content_list[0]
+                if not isinstance(first, dict) or "text" not in first:
+                    raise Exception(f"LLM content[0] has unexpected shape (model={cfg.model}): {first}")
+                content = first["text"]
         else:
             async with httpx.AsyncClient(timeout=120) as client:
                 resp = await client.post(
@@ -373,12 +416,17 @@ class ProgramExecutor:
                         f"LLM API error {resp.status_code} from {base_url} "
                         f"(model={cfg.model}): {resp.text[:500]}"
                     )
-                data = resp.json()
-                content = (
-                    data["choices"][0]["message"]["content"]
-                    if data.get("choices")
-                    else ""
-                )
+                try:
+                    data = resp.json()
+                except Exception as parse_err:
+                    raise Exception(f"LLM returned non-JSON response (model={cfg.model}): {resp.text[:300]}") from parse_err
+                choices = data.get("choices") or []
+                if not choices:
+                    raise Exception(f"LLM returned no choices (model={cfg.model}). Full response: {resp.text[:500]}")
+                message = choices[0].get("message") or {}
+                content = message.get("content") or ""
+                if content is None:
+                    raise Exception(f"LLM message.content is null (model={cfg.model}). Full response: {resp.text[:500]}")
 
         # Try to parse as JSON, else wrap in text field
         try:
@@ -430,8 +478,13 @@ class ProgramExecutor:
             output_key: str = extra.get("output_key", "text")
             try:
                 result = template.format_map(input_data)
-            except (KeyError, ValueError):
-                result = template
+            except KeyError as e:
+                raise ExecutionError(
+                    "FORMAT_KEY_MISSING",
+                    f"Format template references key {e} which is not present in input. Available keys: {list(input_data.keys())}",
+                )
+            except ValueError as e:
+                raise ExecutionError("FORMAT_ERROR", f"Format template is invalid: {e}")
             return {**input_data, output_key: result}
 
         elif cfg.logic_type == "parse":
@@ -444,14 +497,17 @@ class ProgramExecutor:
                 import json as _json
                 try:
                     parsed = _json.loads(raw) if isinstance(raw, str) else raw
-                except Exception:
-                    parsed = raw
+                except Exception as e:
+                    raise ExecutionError(
+                        "PARSE_JSON_FAILED",
+                        f"Failed to parse JSON from key '{input_key}': {e}. Raw value (first 200 chars): {str(raw)[:200]}",
+                    )
             elif fmt == "csv":
                 try:
                     reader = _csv.DictReader(_io.StringIO(str(raw)))
                     parsed = list(reader)
-                except Exception:
-                    parsed = []
+                except Exception as e:
+                    raise ExecutionError("PARSE_CSV_FAILED", f"Failed to parse CSV from key '{input_key}': {e}")
             elif fmt == "lines":
                 parsed = [line for line in str(raw).splitlines() if line.strip()]
             else:
@@ -484,8 +540,11 @@ class ProgramExecutor:
                     key=lambda x: x.get(key) if isinstance(x, dict) else x,
                     reverse=(order == "desc"),
                 )
-            except TypeError:
-                sorted_items = items
+            except TypeError as e:
+                raise ExecutionError(
+                    "SORT_TYPE_ERROR",
+                    f"Cannot sort items by key '{key}': {e}. Items may have mixed or non-comparable types.",
+                )
             return {**input_data, "items": sorted_items}
 
         return input_data
@@ -519,10 +578,35 @@ class ProgramExecutor:
                         "CONNECTOR_NOT_FOUND",
                         f"No native connector found for connection '{connection_name}'",
                     )
+
+                # Resolve {{expressions}} in operation_params against upstream input_data
+                raw_params = cfg.operation_params or {}
+                resolved_params: dict[str, Any] = {}
+                for k, v in raw_params.items():
+                    if isinstance(v, str):
+                        resolved = _resolve_expressions(v, input_data)
+                        # If expression resolved to empty string and original was a template,
+                        # keep None so connectors can give a clear "missing param" error
+                        if resolved == "" and re.search(r"\{\{", v):
+                            resolved_params[k] = None
+                            print(
+                                f"[executor] WARNING: param '{k}' for {cfg.operation} "
+                                f"resolved to empty (expression: {v!r}). "
+                                f"Upstream data keys: {list(input_data.keys())}",
+                                flush=True,
+                            )
+                        else:
+                            resolved_params[k] = resolved
+                    elif isinstance(v, (dict, list)):
+                        # Recursively resolve nested string values
+                        resolved_params[k] = _resolve_nested(v, input_data)
+                    else:
+                        resolved_params[k] = v
+
                 try:
                     result = await connector.execute(
                         cfg.operation,
-                        cfg.operation_params or {},
+                        resolved_params,
                         access_token,
                     )
                 except ConnectorError as exc:
@@ -805,8 +889,22 @@ class ProgramExecutor:
                 f"{nextjs_url}/api/internal/connections/{connection_id}/token",
                 headers={"x-runtime-secret": secret},
             )
-            resp.raise_for_status()
-            data = resp.json()
+            if not resp.is_success:
+                try:
+                    body = resp.json()
+                    detail = body.get("error") or body.get("message") or resp.text[:300]
+                except Exception:
+                    detail = resp.text[:300]
+                raise ExecutionError(
+                    "OAUTH_TOKEN_FAILED",
+                    f"Could not retrieve token for connection {connection_id} (HTTP {resp.status_code}): {detail}",
+                )
+            try:
+                data = resp.json()
+            except Exception as e:
+                raise ExecutionError("OAUTH_TOKEN_FAILED", f"Token endpoint returned non-JSON response for connection {connection_id}: {resp.text[:200]}") from e
+            if "access_token" not in data:
+                raise ExecutionError("OAUTH_TOKEN_FAILED", f"Token endpoint response missing 'access_token' for connection {connection_id}. Got keys: {list(data.keys())}")
             return str(data["access_token"])
 
     async def _fetch_api_key(self, api_key_ref: str) -> tuple[str, str]:
@@ -815,13 +913,26 @@ class ProgramExecutor:
         """
         nextjs_url = os.environ.get("NEXTJS_INTERNAL_URL", "http://localhost:3000")
         secret = os.environ["RUNTIME_SECRET"]
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(
                 f"{nextjs_url}/api/internal/vault/{api_key_ref}",
                 headers={"x-runtime-secret": secret},
             )
-            resp.raise_for_status()
-            data = resp.json()
+            if not resp.is_success:
+                try:
+                    detail = resp.json().get("error", resp.text[:300])
+                except Exception:
+                    detail = resp.text[:300]
+                raise ExecutionError(
+                    "API_KEY_FETCH_FAILED",
+                    f"Could not fetch API key '{api_key_ref}' (HTTP {resp.status_code}): {detail}",
+                )
+            try:
+                data = resp.json()
+            except Exception as e:
+                raise ExecutionError("API_KEY_FETCH_FAILED", f"Vault endpoint returned non-JSON for key '{api_key_ref}': {resp.text[:200]}") from e
+            if "value" not in data:
+                raise ExecutionError("API_KEY_FETCH_FAILED", f"Vault response missing 'value' for key '{api_key_ref}'. Got keys: {list(data.keys())}")
             return str(data["value"]), str(data.get("provider", ""))
 
     async def _with_retry(
@@ -834,16 +945,25 @@ class ProgramExecutor:
         for attempt in range(1, retry.max_attempts + 1):
             try:
                 return await fn()
+            except ExecutionError:
+                # ExecutionError (including OAUTH_TOKEN_FAILED) — never retry, always fatal
+                raise
             except Exception as e:
                 last_error = e
+                error_msg = str(e)
+                # Don't retry 4xx errors — they are permanent (bad model ID, bad auth, etc.)
+                is_client_error = any(
+                    f"LLM API error {code}" in error_msg or f"returned {code}" in error_msg
+                    for code in range(400, 500)
+                )
                 await update_node_execution(
                     self.db,
                     self.run_id,
                     node_id,
                     retry_count=attempt,
-                    error_message=str(e),
+                    error_message=error_msg,
                 )
-                if attempt == retry.max_attempts:
+                if attempt == retry.max_attempts or is_client_error:
                     break
                 delay_map = {
                     "none": 0.0,
@@ -854,48 +974,66 @@ class ProgramExecutor:
                 if delay > 0:
                     await asyncio.sleep(delay)
 
+        err_msg = str(last_error) if last_error else "Unknown error after retries"
         if retry.fail_program_on_exhaust:
-            raise ExecutionError(
-                "MAX_RETRIES_EXHAUSTED", str(last_error), node_id
-            )
+            raise ExecutionError("MAX_RETRIES_EXHAUSTED", err_msg, node_id)
+        # Non-fatal exhaustion: record the final error on the node execution so it's visible
+        await update_node_execution(
+            self.db,
+            self.run_id,
+            node_id,
+            status="failed",
+            error_message=f"[Retries exhausted — continuing run] {err_msg}",
+            completed_at="now()",
+        )
         return {}
 
 
 def _safe_eval_transform(expression: str, data: dict) -> Any:
-    """Evaluate a transformation expression in a sandboxed namespace."""
+    """Evaluate a transformation expression in a sandboxed namespace.
+    Raises ExecutionError on any failure — never silently returns wrong data.
+    """
+    namespace: dict[str, Any] = {
+        "data": data,
+        "__builtins__": {
+            "len": len,
+            "str": str,
+            "int": int,
+            "float": float,
+            "list": list,
+            "dict": dict,
+            "bool": bool,
+        },
+    }
     try:
-        namespace: dict[str, Any] = {
-            "data": data,
-            "__builtins__": {
-                "len": len,
-                "str": str,
-                "int": int,
-                "float": float,
-                "list": list,
-                "dict": dict,
-                "bool": bool,
-            },
-        }
         return eval(expression, namespace)  # noqa: S307
-    except Exception:
-        return data
+    except Exception as e:
+        raise RuntimeError(
+            f"[TRANSFORM_EVAL_ERROR] Expression '{expression}' failed: "
+            f"{type(e).__name__}: {e}. Available data keys: {list(data.keys())}"
+        ) from e
 
 
 def _safe_eval_condition(condition: str, data: dict) -> bool:
-    """Evaluate a boolean condition expression."""
+    """Evaluate a boolean condition expression.
+    Raises RuntimeError on any failure — never silently returns False.
+    """
+    namespace: dict[str, Any] = {
+        "data": data,
+        "__builtins__": {
+            "len": len,
+            "str": str,
+            "int": int,
+            "float": float,
+            "True": True,
+            "False": False,
+        },
+    }
     try:
-        namespace: dict[str, Any] = {
-            "data": data,
-            "__builtins__": {
-                "len": len,
-                "str": str,
-                "int": int,
-                "float": float,
-                "True": True,
-                "False": False,
-            },
-        }
         result = eval(condition, namespace)  # noqa: S307
         return bool(result)
-    except Exception:
-        return False
+    except Exception as e:
+        raise RuntimeError(
+            f"[CONDITION_EVAL_ERROR] Condition '{condition}' failed: "
+            f"{type(e).__name__}: {e}. Available data keys: {list(data.keys())}"
+        ) from e

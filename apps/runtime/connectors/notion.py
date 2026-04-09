@@ -64,7 +64,10 @@ class NotionConnector(IConnector):
         blocks_r = await request_with_rate_limit(
             client, "GET", f"{_BASE}/blocks/{page_id}/children", headers=headers
         )
-        blocks = blocks_r.json().get("results", []) if blocks_r.status_code == 200 else []
+        try:
+            blocks = blocks_r.json().get("results", []) if blocks_r.status_code == 200 else []
+        except Exception:
+            blocks = []
         return {"page": page, "blocks": blocks}
 
     async def _create_page(
@@ -88,7 +91,10 @@ class NotionConnector(IConnector):
             client, "POST", f"{_BASE}/pages", headers=headers, json=body
         )
         _raise_for_status(r, "create_page")
-        result = r.json()
+        try:
+            result = r.json()
+        except Exception as e:
+            raise ConnectorError("NOTION_PARSE_ERROR", f"create_page returned non-JSON response: {r.text[:200]}") from e
         return {"page_id": result.get("id"), "url": result.get("url")}
 
     async def _append_to_page(
@@ -152,7 +158,10 @@ class NotionConnector(IConnector):
             client, "POST", f"{_BASE}/pages", headers=headers, json=body
         )
         _raise_for_status(r, "create_database_entry")
-        result = r.json()
+        try:
+            result = r.json()
+        except Exception as e:
+            raise ConnectorError("NOTION_PARSE_ERROR", f"create_database_entry returned non-JSON response: {r.text[:200]}") from e
         return {"page_id": result.get("id"), "url": result.get("url")}
 
 

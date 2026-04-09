@@ -76,11 +76,29 @@ CONNECTION NODE CONFIG:
 }
 
 Supported operations per provider (use exact operation names):
-- gmail:   list_emails, list_threads, search, read_email, get_attachment, send_email, archive_email, label_email
-- notion:  read_page, create_page, append_to_page, query_database, create_database_entry
-- slack:   send_message, read_channel, list_channels, create_channel
-- github:  create_issue, comment_on_issue, list_prs, get_pr_diff, push_file
-- sheets:  read_range, write_range, append_row, list_sheets, clear_range
+
+GMAIL:
+- search / list_emails — returns stubs ONLY: [{id, threadId}]. NEVER pass these stubs to an agent or Notion.
+  REQUIRED pattern: search → filter step (guard empty) → loop step → read_email → agent/connector.
+  After search, ALWAYS add a step node (logic_type: "filter", condition: "len(data.get('emails', [])) > 0") to guard against empty results.
+  Then add a step node (logic_type: "loop", over: "data['emails']", item_var: "email") to iterate.
+  Then add a read_email connection node with operation_params: {"message_id": "{{loop_node.email.id}}"}.
+  search requires operation_params.query (e.g. "is:unread", "label:inbox"). Never omit it.
+- read_email — returns: {subject, body, from, to, snippet, labels, ...}. Use this output for downstream agents/Notion.
+- send_email, archive_email, label_email, get_attachment, list_threads
+
+NOTION:
+- create_database_entry — required: operation_params.database_id (the Notion database UUID), operation_params.properties (object).
+  Use this when adding rows to a database (e.g. a Tasks database). Do NOT use create_page for database rows.
+- create_page — required: operation_params.parent_id (existing Notion page UUID), optional: title, content.
+  Use this for creating sub-pages, not database entries.
+- query_database — required: operation_params.database_id
+- read_page — required: operation_params.page_id
+- append_to_page — required: operation_params.page_id, operation_params.content
+
+SLACK:   send_message, read_channel, list_channels, create_channel
+GITHUB:  create_issue, comment_on_issue, list_prs, get_pr_diff, push_file
+SHEETS:  read_range, write_range, append_row, list_sheets, clear_range
 
 When to set operation: when the connection node performs a concrete action (e.g. send a Slack message, write to Sheets).
 When to omit operation: when a downstream agent node will use the token itself via {{node_id.access_token}}.

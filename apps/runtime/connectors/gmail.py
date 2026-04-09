@@ -109,9 +109,7 @@ class GmailConnector(IConnector):
         self, client: httpx.AsyncClient, headers: dict, params: dict
     ) -> dict:
         query = str(params.get("query", "")).strip()
-        if not query:
-            raise ConnectorError("MISSING_PARAM", "search requires 'query'")
-        # Gmail search runs through the messages list endpoint with a query string.
+        # Empty query is valid — falls back to listing all messages (same as list_emails).
         return await self._list_emails(
             client,
             headers,
@@ -126,7 +124,12 @@ class GmailConnector(IConnector):
     ) -> dict:
         message_id = params.get("message_id")
         if not message_id:
-            raise ConnectorError("MISSING_PARAM", "read_email requires 'message_id'")
+            raise ConnectorError(
+                "MISSING_PARAM",
+                "read_email requires 'message_id' — the upstream search/list node returned no emails "
+                "(emails list is empty or the expression {{...}} did not resolve). "
+                "Add a filter/guard step to skip read_email when the email list is empty.",
+            )
 
         r = await request_with_rate_limit(
             client,

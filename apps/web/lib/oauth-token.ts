@@ -6,7 +6,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@flowos/db";
-import { vaultStore, vaultRetrieve } from "@/lib/vault";
+import { vaultStore, vaultRetrieve, vaultDelete } from "@/lib/vault";
 
 type Client = SupabaseClient<Database>;
 
@@ -83,6 +83,14 @@ async function rotateVaultTokens(
       : Date.now() + 3600 * 1000, // default 1h if not specified
   };
 
+  // Delete the old vault secret first so the name slot is free for re-use.
+  // Ignore errors — the old record may have already been deleted or the id stale.
+  try {
+    await vaultDelete(supabase, vaultSecretId);
+  } catch {
+    // non-fatal
+  }
+
   // Store new tokens (creates a new vault record)
   const newVaultId = await vaultStore(
     supabase,
@@ -119,7 +127,7 @@ export async function getValidOAuthToken(
     .eq("id", connectionId)
     .single();
 
-  if (connErr || !conn) throw new Error(`Connection ${connectionId} not found`);
+  if (connErr || !conn) throw new Error(`Connection ${connectionId} not found${connErr ? `: ${connErr.message}` : ""}`);
 
   type ConnRow = { id: string; provider: string; vault_secret_id: string; metadata: Record<string, unknown> | null };
   const connection = conn as unknown as ConnRow;
@@ -132,7 +140,12 @@ export async function getValidOAuthToken(
   }
 
   const raw = await vaultRetrieve(supabase, connection.vault_secret_id);
-  const tokens: StoredTokens = JSON.parse(raw);
+  let tokens: StoredTokens;
+  try {
+    tokens = JSON.parse(raw);
+  } catch {
+    throw new Error(`Vault secret for connection ${connectionId} (provider: ${connection.provider}) contains invalid JSON — the token may be corrupted. Please reconnect.`);
+  }
 
   // Check if token is still valid (with threshold)
   const nowMs = Date.now();
@@ -180,15 +193,20 @@ export async function getValidOAuthToken(
 
   if (!refreshRes.ok) {
     const errText = await refreshRes.text();
-    // Mark as invalid so user knows to reconnect
-    await supabase
-      .from("connections")
-      .update({ is_valid: false })
-      .eq("id", connectionId);
-    throw new Error(`Token refresh failed for ${connection.provider}: ${errText}`);
+    await supabase.from("connections").update({ is_valid: false }).eq("id", connectionId);
+    throw new Error(`Token refresh failed for ${connection.provider} (HTTP ${refreshRes.status}): ${errText}`);
   }
 
-  const refreshed: StoredTokens = await refreshRes.json();
+  let refreshed: StoredTokens;
+  try {
+    refreshed = await refreshRes.json();
+  } catch {
+    const raw = await refreshRes.text().catch(() => "(unreadable)");
+    throw new Error(`Token refresh for ${connection.provider} returned non-JSON: ${raw.slice(0, 200)}`);
+  }
+  if (!refreshed.access_token) {
+    throw new Error(`Token refresh for ${connection.provider} succeeded but response has no access_token. Keys: ${Object.keys(refreshed).join(", ")}`);
+  }
 
   // Preserve the existing refresh_token if provider didn't return a new one
   const newTokens: StoredTokens = {
@@ -197,9 +215,8 @@ export async function getValidOAuthToken(
     refresh_token: refreshed.refresh_token ?? tokens.refresh_token,
   };
 
-  // Rotate vault entry — include connectionId so concurrent refreshes for different
-  // connections of the same provider don't overwrite each other's vault label.
-  const vaultName = `oauth:${connectionId}:refreshed`;
+  // Each refresh gets a unique name so the vault unique constraint is never hit.
+  const vaultName = `oauth:${connectionId}:${Date.now()}`;
   await rotateVaultTokens(supabase, connectionId, connection.vault_secret_id, newTokens, vaultName);
 
   return newTokens.access_token;

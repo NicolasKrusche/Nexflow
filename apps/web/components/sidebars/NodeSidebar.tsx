@@ -433,7 +433,7 @@ const MODEL_PRESETS: Record<string, string[]> = {
   anthropic:  ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
   openai:     ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o3-mini"],
   openrouter: [
-    "meta-llama/llama-3.1-8b-instruct:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
     "mistralai/mistral-7b-instruct:free",
     "google/gemini-flash-1.5-8b",
     "deepseek/deepseek-chat",

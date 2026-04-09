@@ -109,7 +109,11 @@
       "Bash(ls H:/Archon/ARCHON_1/apps/runtime/requirements*.txt)",
       "Bash(/c/Python313/python -m venv venv)",
       "Bash(venv/Scripts/pip install:*)",
-      "Bash(venv/Scripts/uvicorn main:app --host 0.0.0.0 --port 8000 --reload)"
+      "Bash(venv/Scripts/uvicorn main:app --host 0.0.0.0 --port 8000 --reload)",
+      "Bash(pip show:*)",
+      "Bash(python -c \"from db import get_db, get_active_cron_workflows, release_run_locks, update_run; print\\('db ok'\\)\")",
+      "Bash(python -c ':*)",
+      "Bash(uvicorn main:app --port 8000 --log-level info)"
     ]
   }
 }

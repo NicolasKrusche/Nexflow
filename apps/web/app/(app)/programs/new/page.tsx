@@ -74,7 +74,7 @@ export default function NewProgramPage() {
     google: "gemini-1.5-pro",
     groq: "llama-3.1-70b-versatile",
     mistral: "mistral-large-latest",
-    openrouter: "deepseek/deepseek-chat:free",
+    openrouter: "nvidia/nemotron-3-super-120b-a12b:free",
   };
 
   async function loadApiKeys() {
