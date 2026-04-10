@@ -150,6 +150,13 @@ class NotionConnector(IConnector):
         properties = params.get("properties", {})
         if not database_id:
             raise ConnectorError("MISSING_PARAM", "create_database_entry requires 'database_id'")
+        if database_id == "__USER_ASSIGNED__":
+            raise ConnectorError(
+                "UNSET_PARAM",
+                "create_database_entry: 'database_id' has not been set. "
+                "Open the program in the editor and replace __USER_ASSIGNED__ with your Notion database ID. "
+                "You can find the database ID in the Notion URL: notion.so/<workspace>/<database_id>?v=...",
+            )
         body = {
             "parent": {"database_id": database_id},
             "properties": properties,
@@ -166,6 +173,11 @@ class NotionConnector(IConnector):
 
 
 def _raise_for_status(r: httpx.Response, operation: str) -> None:
+    if r.status_code == 401:
+        raise ConnectorError(
+            "TOKEN_EXPIRED",
+            f"Notion {operation} failed: OAuth access token is invalid or expired",
+        )
     if r.status_code >= 400:
         raise ConnectorError(
             "NOTION_API_ERROR",

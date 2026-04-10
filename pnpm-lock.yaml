@@ -15,6 +15,8 @@ importers:
         specifier: ^5.4.5
         version: 5.9.3
 
+  apps/runtime: {}
+
   apps/web:
     dependencies:
       '@anthropic-ai/sdk':
@@ -47,6 +49,9 @@ importers:
       inngest:
         specifier: ^4.2.0
         version: 4.2.0(@opentelemetry/core@2.6.1(@opentelemetry/api@1.9.1))(next@14.2.3(@opentelemetry/api@1.9.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react@18.3.1)(typescript@5.9.3)(zod@3.25.76)
+      jsonrepair:
+        specifier: ^3.13.3
+        version: 3.13.3
       next:
         specifier: 14.2.3
         version: 14.2.3(@opentelemetry/api@1.9.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -2441,6 +2446,10 @@ packages:
 
   json5@1.0.2:
     resolution: {integrity: sha512-g1MWMLBiz8FKi1e4w0UyVL3w+iJceWAFBAaBnnGKOpNa5f8TLktkbre1+s6oICydWAm+HRUGTmI+//xv2hvXYA==}
+    hasBin: true
+
+  jsonrepair@3.13.3:
+    resolution: {integrity: sha512-BTznj0owIt2CBAH/LTo7+1I5pMvl1e1033LRl/HUowlZmJOIhzC0zbX5bxMngLkfT4WnzPP26QnW5wMr2g9tsQ==}
     hasBin: true
 
   jsx-ast-utils@3.3.5:
@@ -6088,6 +6097,8 @@ snapshots:
   json5@1.0.2:
     dependencies:
       minimist: 1.2.8
+
+  jsonrepair@3.13.3: {}
 
   jsx-ast-utils@3.3.5:
     dependencies:

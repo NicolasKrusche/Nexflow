@@ -150,9 +150,14 @@ export default async function DashboardPage() {
             Here&apos;s an overview of your automation workspace.
           </p>
         </div>
-        <Button asChild className="shrink-0">
-          <Link href="/programs/new">New program</Link>
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button asChild variant="outline">
+            <Link href="/programs/import">Import program</Link>
+          </Button>
+          <Button asChild>
+            <Link href="/programs/new">New program</Link>
+          </Button>
+        </div>
       </div>
 
       {/* ── Stats row ── */}
@@ -311,6 +316,17 @@ export default async function DashboardPage() {
                   icon: (
                     <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-primary">
                       <path d="M8.75 3.75a.75.75 0 0 0-1.5 0v3.5h-3.5a.75.75 0 0 0 0 1.5h3.5v3.5a.75.75 0 0 0 1.5 0v-3.5h3.5a.75.75 0 0 0 0-1.5h-3.5v-3.5Z" />
+                    </svg>
+                  ),
+                },
+                {
+                  label: "Import program",
+                  description: "Upload or paste a JSON schema",
+                  href: "/programs/import",
+                  icon: (
+                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5 text-muted-foreground">
+                      <path d="M8.75 2.75a.75.75 0 0 0-1.5 0v5.69L5.28 6.47a.75.75 0 0 0-1.06 1.06l3.25 3.25a.75.75 0 0 0 1.06 0l3.25-3.25a.75.75 0 0 0-1.06-1.06L8.75 8.44V2.75Z" />
+                      <path d="M2.75 12a.75.75 0 0 0 0 1.5h10.5a.75.75 0 0 0 0-1.5H2.75Z" />
                     </svg>
                   ),
                 },

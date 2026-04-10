@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/api";
-import { storeOAuthTokens } from "@/lib/oauth-token";
+import { upsertOAuthConnection } from "@/lib/oauth-token";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -45,31 +45,18 @@ export async function GET(request: Request) {
   const workspaceName: string = tokens.workspace_name ?? "";
 
   const serviceClient = createServiceClient();
-  let vaultId: string;
   try {
-    vaultId = await storeOAuthTokens(
-      serviceClient,
+    await upsertOAuthConnection(serviceClient, {
+      userId,
+      provider: "notion",
+      label,
       tokens,
-      `oauth:${userId}:notion:${label}`,
-      `Notion OAuth tokens for user ${userId}`
-    );
+      scopes: ["read_content", "update_content", "insert_content"],
+      metadata: { workspace: workspaceName },
+    });
   } catch {
     return NextResponse.redirect(`${origin}/connections?error=vault_failed`);
   }
-
-  const { error } = await serviceClient.from("connections").insert({
-    user_id: userId,
-    name: label,
-    provider: "notion",
-    auth_type: "oauth",
-    vault_secret_id: vaultId,
-    scopes: ["read_content", "update_content", "insert_content"],
-    metadata: { workspace: workspaceName },
-    is_valid: true,
-    last_validated_at: new Date().toISOString(),
-  });
-
-  if (error) return NextResponse.redirect(`${origin}/connections?error=db_insert_failed`);
 
   return NextResponse.redirect(`${origin}/connections?connected=notion`);
 }

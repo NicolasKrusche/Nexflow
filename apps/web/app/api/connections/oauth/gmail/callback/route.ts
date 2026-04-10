@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceClient, apiError } from "@/lib/api";
-import { storeOAuthTokens } from "@/lib/oauth-token";
+import { upsertOAuthConnection } from "@/lib/oauth-token";
 
 // GET /api/connections/oauth/gmail/callback
 export async function GET(request: Request) {
@@ -52,35 +52,18 @@ export async function GET(request: Request) {
   });
   const userInfo = userInfoRes.ok ? await userInfoRes.json() : {};
 
-  // Store tokens in Vault
   const serviceClient = createServiceClient();
-  let vaultId: string;
   try {
-    vaultId = await storeOAuthTokens(
-      serviceClient,
+    await upsertOAuthConnection(serviceClient, {
+      userId,
+      provider: "gmail",
+      label,
       tokens,
-      `oauth:${userId}:gmail:${label}`,
-      `Gmail OAuth tokens for user ${userId}`
-    );
+      scopes: ["gmail.readonly", "gmail.modify", "gmail.send"],
+      metadata: { email: userInfo.email ?? null },
+    });
   } catch {
     return NextResponse.redirect(`${origin}/connections?error=vault_failed`);
-  }
-
-  // Create connections row
-  const { error } = await serviceClient.from("connections").insert({
-    user_id: userId,
-    name: label,
-    provider: "gmail",
-    auth_type: "oauth",
-    vault_secret_id: vaultId,
-    scopes: ["gmail.readonly", "gmail.modify", "gmail.send"],
-    metadata: { email: userInfo.email ?? null },
-    is_valid: true,
-    last_validated_at: new Date().toISOString(),
-  });
-
-  if (error) {
-    return NextResponse.redirect(`${origin}/connections?error=db_insert_failed`);
   }
 
   return NextResponse.redirect(`${origin}/connections?connected=gmail`);

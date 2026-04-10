@@ -233,6 +233,11 @@ class GitHubConnector(IConnector):
 
 
 def _raise_for_status(r: httpx.Response, operation: str) -> None:
+    if r.status_code == 401:
+        raise ConnectorError(
+            "TOKEN_EXPIRED",
+            f"GitHub {operation} failed: OAuth access token is invalid or expired",
+        )
     if r.status_code >= 400:
         raise ConnectorError(
             "GITHUB_API_ERROR",

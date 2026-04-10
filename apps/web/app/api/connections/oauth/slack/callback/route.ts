@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/api";
-import { storeOAuthTokens } from "@/lib/oauth-token";
+import { upsertOAuthConnection } from "@/lib/oauth-token";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -42,36 +42,23 @@ export async function GET(request: Request) {
   const botToken: string = tokens.access_token;
 
   const serviceClient = createServiceClient();
-  let vaultId: string;
   try {
-    vaultId = await storeOAuthTokens(
-      serviceClient,
-      { access_token: botToken, team: tokens.team },
-      `oauth:${userId}:slack:${label}`,
-      `Slack OAuth tokens for user ${userId}`
-    );
+    await upsertOAuthConnection(serviceClient, {
+      userId,
+      provider: "slack",
+      label,
+      tokens: { access_token: botToken, team: tokens.team },
+      scopes: ["channels:read", "channels:history", "chat:write", "app_mentions:read"],
+      metadata: {
+        team: teamName,
+        team_id: teamId,
+        bot_user_id: tokens.bot_user_id ?? null,
+        app_id: tokens.app_id ?? null,
+      },
+    });
   } catch {
     return NextResponse.redirect(`${origin}/connections?error=vault_failed`);
   }
-
-  const { error } = await serviceClient.from("connections").insert({
-    user_id: userId,
-    name: label,
-    provider: "slack",
-    auth_type: "oauth",
-    vault_secret_id: vaultId,
-    scopes: ["channels:read", "channels:history", "chat:write", "app_mentions:read"],
-    metadata: {
-      team: teamName,
-      team_id: teamId,
-      bot_user_id: tokens.bot_user_id ?? null,
-      app_id: tokens.app_id ?? null,
-    },
-    is_valid: true,
-    last_validated_at: new Date().toISOString(),
-  });
-
-  if (error) return NextResponse.redirect(`${origin}/connections?error=db_insert_failed`);
 
   return NextResponse.redirect(`${origin}/connections?connected=slack`);
 }

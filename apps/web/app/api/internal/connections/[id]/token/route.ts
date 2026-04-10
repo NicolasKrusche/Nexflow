@@ -19,11 +19,12 @@ export async function GET(
   const { id } = params;
   if (!id) return apiError("Missing connection id", 400);
 
+  const forceRefresh = new URL(request.url).searchParams.get("force_refresh") === "true";
   const serviceClient = createServiceClient();
 
   let accessToken: string;
   try {
-    accessToken = await getValidOAuthToken(serviceClient, id);
+    accessToken = await getValidOAuthToken(serviceClient, id, forceRefresh);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to retrieve token";
     return apiError(message, 500);

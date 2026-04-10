@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceClient, apiError } from "@/lib/api";
-import { storeOAuthTokens } from "@/lib/oauth-token";
+import { upsertOAuthConnection } from "@/lib/oauth-token";
 
 const SCOPES_STORED: Record<string, string[]> = {
   sheets: ["spreadsheets.readonly", "spreadsheets", "drive.readonly"],
@@ -52,31 +52,18 @@ export async function GET(request: Request) {
   const userInfo = userInfoRes.ok ? await userInfoRes.json() : {};
 
   const serviceClient = createServiceClient();
-  let vaultId: string;
   try {
-    vaultId = await storeOAuthTokens(
-      serviceClient,
+    await upsertOAuthConnection(serviceClient, {
+      userId,
+      provider: service,
+      label,
       tokens,
-      `oauth:${userId}:${service}:${label}`,
-      `Google ${service} OAuth tokens for user ${userId}`
-    );
+      scopes: SCOPES_STORED[service] ?? [],
+      metadata: { email: userInfo.email ?? null },
+    });
   } catch {
     return NextResponse.redirect(`${origin}/connections?error=vault_failed`);
   }
-
-  const { error } = await serviceClient.from("connections").insert({
-    user_id: userId,
-    name: label,
-    provider: service,
-    auth_type: "oauth",
-    vault_secret_id: vaultId,
-    scopes: SCOPES_STORED[service] ?? [],
-    metadata: { email: userInfo.email ?? null },
-    is_valid: true,
-    last_validated_at: new Date().toISOString(),
-  });
-
-  if (error) return NextResponse.redirect(`${origin}/connections?error=db_insert_failed`);
 
   return NextResponse.redirect(`${origin}/connections?connected=${service}`);
 }

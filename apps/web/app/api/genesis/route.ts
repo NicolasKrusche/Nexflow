@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
+import { jsonrepair } from "jsonrepair";
+
+// Extend Vercel serverless function timeout (300s max on Pro plan)
+export const maxDuration = 300;
 import { createServerClient } from "@/lib/supabase/server";
 import { apiError, createServiceClient } from "@/lib/api";
 import { vaultRetrieve } from "@/lib/vault";
@@ -85,13 +89,15 @@ export async function POST(request: Request) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       if (useAnthropicSDK) {
+        // Stream to keep the connection alive during long generations
         const anthropic = new Anthropic({ apiKey: anthropicApiKey });
-        const msg = await anthropic.messages.create({
+        const stream = anthropic.messages.stream({
           model,
-          max_tokens: 4096,
+          max_tokens: 8192,
           system: GENESIS_SYSTEM_PROMPT,
           messages: [{ role: "user", content: buildGenesisUserMessage(description, availableConnections) }],
         });
+        const msg = await stream.finalMessage();
         rawText = msg.content[0]?.type === "text" ? (msg.content[0] as { type: "text"; text: string }).text : "";
       } else {
         const baseURL = apiKeyRow.provider === "openrouter"
@@ -104,32 +110,24 @@ export async function POST(request: Request) {
                 ? "https://api.mistral.ai/v1"
                 : undefined;
 
-        const openai = new OpenAI({ apiKey: anthropicApiKey, ...(baseURL && { baseURL }), timeout: 120_000 });
-        const msg = await openai.chat.completions.create({
+        // Use stream: true — prevents Cloudflare 524 timeouts on slow providers by
+        // keeping the connection alive during generation instead of holding one long request.
+        const openai = new OpenAI({ apiKey: anthropicApiKey, ...(baseURL && { baseURL }), timeout: 240_000 });
+        const stream = await openai.chat.completions.create({
           model,
-          max_tokens: 4096,
+          max_tokens: 8192,
+          stream: true,
           messages: [
             { role: "system", content: GENESIS_SYSTEM_PROMPT },
             { role: "user", content: buildGenesisUserMessage(description, availableConnections) },
           ],
         });
-        // Some OpenRouter models return choices=undefined or an empty array on failure
-        if (!msg.choices?.length) {
-          const raw = msg as unknown as Record<string, unknown>;
-          const hint = raw.error ?? raw.detail ?? raw.message;
-          const errMsg = hint
-            ? `OpenRouter error: ${typeof hint === "object" ? JSON.stringify(hint) : hint}`
-            : `Model returned no choices (model="${model}" may be unavailable or rate-limited). Full response: ${JSON.stringify(raw).slice(0, 400)}`;
-          const e = new Error(errMsg);
-          if (isRetryable(e) && attempt < 3) {
-            lastErr = e;
-            await new Promise((r) => setTimeout(r, attempt * 2000));
-            continue;
-          }
-          throw e;
+        rawText = "";
+        for await (const chunk of stream) {
+          rawText += chunk.choices[0]?.delta?.content ?? "";
         }
-        rawText = msg.choices[0].message?.content ?? "";
       }
+      if (!rawText) throw new Error(`Model returned empty response (model="${model}" may be unavailable or rate-limited)`);
       break; // success
     } catch (err) {
       lastErr = err;
@@ -144,20 +142,83 @@ export async function POST(request: Request) {
     return apiError(`Genesis model call failed after 3 attempts: ${(lastErr as Error)?.message ?? "empty response"}`, 502);
   }
 
-  // Strip markdown code fences if the model wrapped the JSON (common with non-Anthropic models)
-  const cleanedText = rawText
-    .trim()
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim();
-
-  // Parse and validate the response
+  // ── Parse the response — three-layer recovery ───────────────────────────
+  // Layer 1: extractJson strips fences/preamble and finds the JSON object.
+  // Layer 2: jsonrepair fixes structural issues (truncated output, trailing
+  //          commas, unquoted keys, missing closing braces).
+  // Layer 3: repair prompt — send the broken output back to the model and
+  //          ask it to return only the corrected JSON.
   let parsed_schema: unknown;
+
+  const tryParse = (text: string): unknown => JSON.parse(extractJson(text));
+
+  let parseOk = false;
   try {
-    parsed_schema = JSON.parse(cleanedText);
+    parsed_schema = tryParse(rawText);
+    parseOk = true;
   } catch {
-    console.error("[genesis] Failed to parse JSON. Raw output:", rawText.slice(0, 1000));
-    return apiError("Genesis model returned invalid JSON", 502);
+    // Layer 2 — structural repair
+    try {
+      console.warn("[genesis] Layer-1 parse failed — attempting jsonrepair");
+      parsed_schema = JSON.parse(jsonrepair(extractJson(rawText)));
+      parseOk = true;
+      console.log("[genesis] jsonrepair recovered the schema");
+    } catch {
+      // Layer 3 — repair prompt
+      console.warn("[genesis] jsonrepair failed — sending repair prompt to model");
+      try {
+        const repairPrompt =
+          `The text below is a malformed or truncated JSON schema. ` +
+          `Return ONLY the corrected, complete JSON object — no explanation, no markdown, no code fences.\n\n` +
+          rawText.slice(0, 12000); // cap to avoid blowing the context window
+
+        let repairedText = "";
+        if (useAnthropicSDK) {
+          const anthropic = new Anthropic({ apiKey: anthropicApiKey });
+          const repairMsg = await anthropic.messages.create({
+            model,
+            max_tokens: 8192,
+            messages: [{ role: "user", content: repairPrompt }],
+          });
+          repairedText = repairMsg.content[0]?.type === "text"
+            ? (repairMsg.content[0] as { type: "text"; text: string }).text
+            : "";
+        } else {
+          const baseURL = apiKeyRow.provider === "openrouter"
+            ? "https://openrouter.ai/api/v1"
+            : apiKeyRow.provider === "openai"
+              ? "https://api.openai.com/v1"
+              : apiKeyRow.provider === "groq"
+                ? "https://api.groq.com/openai/v1"
+                : apiKeyRow.provider === "mistral"
+                  ? "https://api.mistral.ai/v1"
+                  : undefined;
+          const openai = new OpenAI({ apiKey: anthropicApiKey, ...(baseURL && { baseURL }), timeout: 120_000 });
+          const repairMsg = await openai.chat.completions.create({
+            model,
+            max_tokens: 8192,
+            messages: [{ role: "user", content: repairPrompt }],
+          });
+          repairedText = repairMsg.choices[0]?.message?.content ?? "";
+        }
+
+        parsed_schema = tryParse(repairedText);
+        parseOk = true;
+        console.log("[genesis] repair prompt recovered the schema");
+      } catch (repairErr) {
+        console.error("[genesis] All three parse layers failed:", (repairErr as Error).message);
+      }
+    }
+  }
+
+  if (!parseOk) {
+    const preview = rawText?.slice(0, 2000) ?? "(empty)";
+    const tail = rawText && rawText.length > 2000 ? `…[${rawText.length} chars total]` : "";
+    console.error("[genesis] Failed to parse JSON. Raw output:", preview + tail);
+    return NextResponse.json(
+      { error: "Genesis model returned invalid JSON", raw_preview: preview + tail },
+      { status: 502 }
+    );
   }
 
   // Check for genesis error signals
@@ -234,6 +295,30 @@ export async function POST(request: Request) {
   if (versionErr) console.error("[genesis] Failed to store version snapshot:", versionErr.message);
 
   return NextResponse.json({ program, schema, validation }, { status: 201 });
+}
+
+// ─── JSON extraction ──────────────────────────────────────────────────────
+// Models sometimes wrap the JSON in markdown code fences, prepend explanation
+// text, or append trailing commentary.  This function finds the first complete
+// JSON object in the response regardless of surrounding noise.
+
+function extractJson(raw: string): string {
+  const text = raw.trim();
+
+  // Fast path: starts with { after stripping a code fence
+  const fenceStripped = text
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+  if (fenceStripped.startsWith("{")) return fenceStripped;
+
+  // Slower path: find the first { and last } — handles prose before/after the JSON
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start !== -1 && end > start) return text.slice(start, end + 1);
+
+  // Give up — return the stripped text and let JSON.parse throw a useful error
+  return fenceStripped;
 }
 
 // ─── Schema normalization ──────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/api";
-import { storeOAuthTokens } from "@/lib/oauth-token";
+import { upsertOAuthConnection } from "@/lib/oauth-token";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -42,31 +42,18 @@ export async function GET(request: Request) {
   const portalInfo = portalRes.ok ? await portalRes.json() : {};
 
   const serviceClient = createServiceClient();
-  let vaultId: string;
   try {
-    vaultId = await storeOAuthTokens(
-      serviceClient,
+    await upsertOAuthConnection(serviceClient, {
+      userId,
+      provider: "hubspot",
+      label,
       tokens,
-      `oauth:${userId}:hubspot:${label}`,
-      `HubSpot OAuth tokens for user ${userId}`
-    );
+      scopes: ["contacts", "deals", "content"],
+      metadata: { hub_domain: portalInfo.hub_domain ?? null, user: portalInfo.user ?? null },
+    });
   } catch {
     return NextResponse.redirect(`${origin}/connections?error=vault_failed`);
   }
-
-  const { error } = await serviceClient.from("connections").insert({
-    user_id: userId,
-    name: label,
-    provider: "hubspot",
-    auth_type: "oauth",
-    vault_secret_id: vaultId,
-    scopes: ["contacts", "deals", "content"],
-    metadata: { hub_domain: portalInfo.hub_domain ?? null, user: portalInfo.user ?? null },
-    is_valid: true,
-    last_validated_at: new Date().toISOString(),
-  });
-
-  if (error) return NextResponse.redirect(`${origin}/connections?error=db_insert_failed`);
 
   return NextResponse.redirect(`${origin}/connections?connected=hubspot`);
 }

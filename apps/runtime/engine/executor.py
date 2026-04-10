@@ -211,7 +211,17 @@ class ProgramExecutor:
                     output = await self._execute_node(target_node, input_data)
                     state[edge.to] = output
                     visited.add(edge.to)
-                    queue.append(edge.to)
+
+                    # If this is a loop step, expand it: run all downstream nodes once
+                    # per item instead of once with the whole list.
+                    if isinstance(output, dict) and "__loop_items__" in output:
+                        body_visited = await self._execute_loop_body(
+                            edge.to, output, state
+                        )
+                        visited.update(body_visited)
+                        # Don't push loop body nodes onto the main queue — they're done.
+                    else:
+                        queue.append(edge.to)
                 except CancellationError:
                     raise
                 except ExecutionError as e:
@@ -234,10 +244,119 @@ class ProgramExecutor:
 
         return state
 
+    async def _execute_loop_body(
+        self, loop_node_id: str, loop_output: dict, state: dict
+    ) -> set[str]:
+        """Execute all nodes downstream of a loop node once per item.
+
+        Returns the set of node IDs that were executed (so the main BFS can skip them).
+        Results are stored in state as {"iterations": [...], "count": N} so downstream
+        nodes (after the loop) can reference aggregated outputs.
+        """
+        items: list = loop_output.get("__loop_items__", [])
+        item_var: str = loop_output.get("item_var", "item")
+
+        # Collect all node IDs that are reachable from the loop node (the loop body)
+        body_ids: set[str] = set()
+        frontier = [e.to for e in self.edges_from.get(loop_node_id, [])]
+        while frontier:
+            nid = frontier.pop()
+            if nid in body_ids:
+                continue
+            body_ids.add(nid)
+            frontier.extend(e.to for e in self.edges_from.get(nid, []))
+
+        # Topological order for body nodes — Kahn's algorithm (BFS with in-degree).
+        # DFS post-order is unreliable for parallel branches: n4→n5 and n4→n6→n7
+        # gives [n6, n7, n5] with DFS, but must be [n5, n6, n7] or [n6, n5, n7].
+        in_degree: dict[str, int] = {nid: 0 for nid in body_ids}
+        for nid in body_ids:
+            for e in self.edges_from.get(nid, []):
+                if e.to in body_ids:
+                    in_degree[e.to] += 1
+        kahn_queue = [nid for nid in body_ids if in_degree[nid] == 0]
+        body_order: list[str] = []
+        while kahn_queue:
+            nid = kahn_queue.pop(0)
+            body_order.append(nid)
+            for e in self.edges_from.get(nid, []):
+                if e.to in body_ids:
+                    in_degree[e.to] -= 1
+                    if in_degree[e.to] == 0:
+                        kahn_queue.append(e.to)
+
+        # Per-node aggregated results across iterations
+        iteration_results: dict[str, list] = {nid: [] for nid in body_ids}
+
+        for idx, item in enumerate(items):
+            print(f"[executor] loop {loop_node_id} — item {idx + 1}/{len(items)}", flush=True)
+            # Build a local state snapshot: inherit current state, inject the loop item
+            local_state = dict(state)
+            local_state[loop_node_id] = {
+                **loop_output,
+                item_var: item,        # {{loop_node_id.item_var.*}}
+                "current_item": item,  # {{loop_node_id.current_item.*}}
+                "index": idx,
+            }
+
+            for nid in body_order:
+                node = self.node_map.get(nid)
+                if not node:
+                    continue
+
+                current_status = await get_run_status(self.db, self.run_id)
+                if current_status == "cancelled":
+                    raise CancellationError()
+
+                # _resolve_input already handles everything:
+                # - flat merge from direct edges ({{field}})
+                # - every executed node by ID ({{node_id.field}})
+                # local_state has the current loop item in local_state[loop_node_id]
+                # and each body node's output as it completes, so all expressions
+                # resolve correctly for any schema topology.
+                body_input = self._resolve_input(nid, local_state)
+                try:
+                    out = await self._execute_node(node, body_input)
+                except ExecutionError as e:
+                    await update_node_execution(
+                        self.db, self.run_id, nid,
+                        status="failed", error_message=e.message, completed_at="now()",
+                    )
+                    out = {}
+                local_state[nid] = out
+                iteration_results[nid].append(out)
+
+        # Write aggregated results back to the shared state
+        for nid, results in iteration_results.items():
+            state[nid] = {"iterations": results, "count": len(items)}
+            # Update the DB record to reflect the final aggregated output
+            await update_node_execution(
+                self.db, self.run_id, nid,
+                status="completed",
+                completed_at="now()",
+                output_payload={"iterations": results, "count": len(items)},
+            )
+
+        return body_ids
+
     def _resolve_input(self, node_id: str, state: dict[str, Any]) -> dict:
-        """Merge upstream outputs according to edge data_mapping."""
+        """Build the input dict for a node.
+
+        Two layers, both always present:
+
+        1. Flat merge from direct upstream edges — {{field}} expressions work.
+           If the edge has a data_mapping, only the mapped fields are included.
+
+        2. Every already-executed node exposed by its ID — {{node_id.field}}
+           expressions always work regardless of edge topology.
+           This is the architectural contract: genesis-generated schemas use
+           {{node_id.field}} and that must resolve for any downstream node,
+           not just nodes with a direct incoming edge from the source.
+        """
         incoming = [e for e in self.schema.edges if e.to == node_id]
         resolved: dict[str, Any] = {}
+
+        # Layer 1: flat merge from direct upstream edges
         for edge in incoming:
             upstream = state.get(edge.from_node) or {}
             if not edge.data_mapping:
@@ -247,16 +366,29 @@ class ProgramExecutor:
                     value = upstream.get(src_field)
                     if value is not None:
                         resolved[tgt_field] = value
+
+        # Layer 2: every node that has already produced output, keyed by node ID.
+        # This makes {{n2.emails}}, {{n5.message_id}}, {{n4.email.id}} etc. work
+        # universally — no special-casing needed anywhere else in the executor.
+        for nid, output in state.items():
+            if output is not None and nid not in resolved:
+                resolved[nid] = output
+
         return resolved
 
     async def _execute_node(self, node: SchemaNode, input_data: dict) -> dict:
+        # input_data includes full state keyed by node ID (for expression resolution),
+        # but logging the entire state to the DB causes oversized payloads and
+        # httpx [Errno 22] on Windows. Log only the "real" input fields — strip
+        # the node-ID keys that were added by _resolve_input layer 2.
+        log_input = {k: v for k, v in input_data.items() if k not in self.node_map}
         await update_node_execution(
             self.db,
             self.run_id,
             node.id,
             status="running",
             started_at="now()",
-            input_payload=input_data,
+            input_payload=log_input,
         )
 
         # In manual mode: pause each node and wait for step-through approval
@@ -585,6 +717,13 @@ class ProgramExecutor:
                 for k, v in raw_params.items():
                     if isinstance(v, str):
                         resolved = _resolve_expressions(v, input_data)
+                        # Catch unset __USER_ASSIGNED__ placeholders before they hit an API
+                        if resolved == "__USER_ASSIGNED__" or v == "__USER_ASSIGNED__":
+                            raise ExecutionError(
+                                "UNSET_PARAM",
+                                f"Parameter '{k}' for operation '{cfg.operation}' has not been configured. "
+                                f"Open the program editor and replace the __USER_ASSIGNED__ placeholder with the actual value.",
+                            )
                         # If expression resolved to empty string and original was a template,
                         # keep None so connectors can give a clear "missing param" error
                         if resolved == "" and re.search(r"\{\{", v):
@@ -610,7 +749,30 @@ class ProgramExecutor:
                         access_token,
                     )
                 except ConnectorError as exc:
-                    raise ExecutionError(exc.code, exc.message) from exc
+                    if exc.code == "TOKEN_EXPIRED":
+                        # Cached token was rejected — force-refresh and retry once
+                        print(
+                            f"[executor] TOKEN_EXPIRED for connection '{connection_name}' "
+                            f"— forcing token refresh and retrying",
+                            flush=True,
+                        )
+                        try:
+                            access_token = await self._fetch_oauth_token(connection_id, force_refresh=True)
+                            result = await connector.execute(cfg.operation, resolved_params, access_token)
+                        except ConnectorError as retry_exc:
+                            provider = self._provider_for_connection(connection_id)
+                            # Mark connection invalid so pre-flight blocks future runs
+                            try:
+                                self.db.table("connections").update({"is_valid": False}).eq("id", connection_id).execute()
+                            except Exception:
+                                pass  # best-effort
+                            raise ExecutionError(
+                                "CONNECTION_AUTH_FAILED",
+                                f"OAuth token is invalid for connection '{connection_name}' "
+                                f"and could not be refreshed. Please reconnect your {provider} account.",
+                            ) from retry_exc
+                    else:
+                        raise ExecutionError(exc.code, exc.message) from exc
                 return {**input_data, **result, "connection_id": connection_id}
 
             # No operation — surface the token to downstream nodes.
@@ -880,14 +1042,16 @@ class ProgramExecutor:
             raise ExecutionError("CONNECTION_NOT_FOUND", f"Connection {connection_id} not found")
         return str(result.data["provider"])
 
-    async def _fetch_oauth_token(self, connection_id: str) -> str:
+    async def _fetch_oauth_token(self, connection_id: str, force_refresh: bool = False) -> str:
         """Fetch a valid (auto-refreshed) OAuth access token from Next.js."""
         nextjs_url = os.environ.get("NEXTJS_INTERNAL_URL", "http://localhost:3000")
         secret = os.environ["RUNTIME_SECRET"]
+        params = {"force_refresh": "true"} if force_refresh else {}
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(
                 f"{nextjs_url}/api/internal/connections/{connection_id}/token",
                 headers={"x-runtime-secret": secret},
+                params=params if params else None,
             )
             if not resp.is_success:
                 try:

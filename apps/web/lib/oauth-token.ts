@@ -46,6 +46,82 @@ const PROVIDER_REFRESH: Record<string, {
 const NON_EXPIRING = new Set(["slack", "notion", "github"]);
 
 /**
+ * Upsert an OAuth connection: store tokens in Vault and create or update the
+ * connections row.  Handles reconnect by reusing the existing row (preserving
+ * its UUID so program_connections FK references stay intact) and deleting the
+ * old Vault secret.  Uses a timestamped Vault name so the unique constraint is
+ * never hit.
+ */
+export async function upsertOAuthConnection(
+  supabase: Client,
+  params: {
+    userId: string;
+    provider: string;
+    label: string;
+    tokens: StoredTokens;
+    scopes: string[];
+    metadata: Record<string, unknown>;
+  },
+): Promise<void> {
+  // Timestamped name guarantees uniqueness on every connect/reconnect
+  const vaultName = `oauth:${params.userId}:${params.provider}:${params.label}:${Date.now()}`;
+  const newVaultId = await storeOAuthTokens(
+    supabase,
+    params.tokens,
+    vaultName,
+    `${params.provider} OAuth tokens for user ${params.userId}`,
+  );
+
+  // Look up any existing connections rows for this user + label
+  const { data: existing } = await supabase
+    .from("connections")
+    .select("id, vault_secret_id")
+    .eq("user_id", params.userId)
+    .eq("name", params.label);
+
+  const rows = (existing ?? []) as Array<{ id: string; vault_secret_id: string }>;
+
+  if (rows.length > 0) {
+    const [primary, ...extras] = rows;
+
+    // Delete old Vault secret for the primary row (best-effort)
+    try { await vaultDelete(supabase, primary.vault_secret_id); } catch { /* ok */ }
+
+    // Clean up any duplicate rows (shouldn't normally exist)
+    for (const extra of extras) {
+      try { await vaultDelete(supabase, extra.vault_secret_id); } catch { /* ok */ }
+      await supabase.from("connections").delete().eq("id", extra.id);
+    }
+
+    // Update the primary row in-place (preserves its UUID → program_connections stay intact)
+    const { error } = await supabase
+      .from("connections")
+      .update({
+        vault_secret_id: newVaultId,
+        scopes: params.scopes,
+        metadata: params.metadata,
+        is_valid: true,
+        last_validated_at: new Date().toISOString(),
+      })
+      .eq("id", primary.id);
+    if (error) throw new Error(`DB update failed: ${error.message}`);
+  } else {
+    const { error } = await supabase.from("connections").insert({
+      user_id: params.userId,
+      name: params.label,
+      provider: params.provider,
+      auth_type: "oauth",
+      vault_secret_id: newVaultId,
+      scopes: params.scopes,
+      metadata: params.metadata,
+      is_valid: true,
+      last_validated_at: new Date().toISOString(),
+    });
+    if (error) throw new Error(`DB insert failed: ${error.message}`);
+  }
+}
+
+/**
  * Store OAuth tokens in Vault, adding expires_at for refresh tracking.
  * All OAuth callbacks should use this instead of vaultStore(JSON.stringify(tokens)) directly.
  */
@@ -118,7 +194,8 @@ async function rotateVaultTokens(
  */
 export async function getValidOAuthToken(
   supabase: Client,
-  connectionId: string
+  connectionId: string,
+  forceRefresh = false,
 ): Promise<string> {
   // Fetch connection row
   const { data: conn, error: connErr } = await supabase
@@ -150,9 +227,9 @@ export async function getValidOAuthToken(
   // Check if token is still valid (with threshold)
   const nowMs = Date.now();
   const expiresAt = tokens.expires_at;
-  const isValid = expiresAt
+  const isValid = !forceRefresh && (expiresAt
     ? expiresAt > nowMs + REFRESH_THRESHOLD_SECONDS * 1000
-    : false; // no expiry stored → assume stale, attempt refresh
+    : false); // no expiry stored → assume stale, attempt refresh
 
   if (isValid) return tokens.access_token;
 
