@@ -83,6 +83,28 @@ Fix:
 Files changed:
 - `apps/runtime/engine/executor.py`
 
+## 6) Pre-flight checks had guidance but no one-click fixes
+
+Symptom:
+- Pre-flight reported issues (missing model/key assignments, broken graph links, invalid credentials) but required fully manual remediation every time.
+
+Root cause:
+- Pre-flight failures only returned text suggestions and did not include structured, executable remediation actions.
+
+Fix:
+- Extended pre-flight failure payloads with typed remediation actions.
+- Added a new `PRE_005` graph-links check that catches invalid edge references and can auto-remove broken edges.
+- Added a safe remediation API endpoint: `POST /api/programs/[id]/preflight/fix`.
+- Updated the Program Run panel to show actionable buttons:
+  - Auto-assign model + API key for agent nodes when possible.
+  - Remove invalid edges automatically.
+  - Direct navigation actions for connection and API key fixes.
+
+Files changed:
+- `apps/web/lib/validation/pre-flight.ts`
+- `apps/web/app/api/programs/[id]/preflight/fix/route.ts`
+- `apps/web/app/(app)/programs/[id]/run-panel.tsx`
+
 ## Quick verification checklist
 
 After pulling these fixes:
@@ -91,3 +113,4 @@ After pulling these fixes:
 3. Re-run a flow that needs internal token fetch.
 4. Re-run the Gmail -> filter -> loop flow with zero emails to confirm it exits cleanly.
 5. Verify filtered branches show downstream nodes as `skipped` (not `pending`).
+6. Open a program page, run pre-flight, and confirm failed checks now show direct fix actions (`Auto-assign...`, `Remove invalid edge`, or navigation links).

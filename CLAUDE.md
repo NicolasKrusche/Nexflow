@@ -66,7 +66,7 @@ Maximum 12 nodes per program.
 Two passes, same result shape (`ValidationResult`):
 
 - **Post-genesis** — synchronous, schema-only, runs before user sees the graph (ERR_001–ERR_012, WARN_001–003)
-- **Pre-flight** — async, live checks (OAuth validity, API key probe, scope checks), runs before execution (PRE_001–004)
+- **Pre-flight** — async, live checks (OAuth validity, API key probe, scope checks, graph-link integrity), runs before execution (PRE_001–005)
 
 **Key rule:** The Run button is disabled when `ValidationResult.valid === false`. Never bypass this.
 
