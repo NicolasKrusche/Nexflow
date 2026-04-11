@@ -31,6 +31,7 @@ export async function GET(request: Request) {
       redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/connections/oauth/typeform/callback`,
       code,
     }),
+    cache: "no-store",
   });
 
   if (!tokenRes.ok) return NextResponse.redirect(`${origin}/connections?error=token_exchange_failed`);
@@ -39,6 +40,7 @@ export async function GET(request: Request) {
 
   const meRes = await fetch("https://api.typeform.com/me", {
     headers: { Authorization: `Bearer ${tokens.access_token}` },
+    cache: "no-store",
   });
   const meInfo = meRes.ok ? await meRes.json() : {};
 

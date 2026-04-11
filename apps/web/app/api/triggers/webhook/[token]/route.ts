@@ -123,6 +123,7 @@ export async function POST(
       triggered_by: "webhook",
       trigger_payload: { trigger_id: trigger.id, webhook_payload: payload },
     }),
+    cache: "no-store",
   }).catch(() => {});
 
   return NextResponse.json({ run_id: run.id, status: "running" }, { status: 202 });

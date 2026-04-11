@@ -266,20 +266,23 @@ export async function getValidOAuthToken(
     headers["Authorization"] = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`;
   }
 
-  const refreshRes = await fetch(config.endpoint, { method: "POST", headers, body });
+  // IMPORTANT: cache: "no-store" — Next.js 14 caches fetch() by default in route
+  // handlers, which would return the same stale access_token on every refresh and
+  // leave the connection permanently broken once the first one expired.
+  const refreshRes = await fetch(config.endpoint, { method: "POST", headers, body, cache: "no-store" });
+  const respText = await refreshRes.text();
 
   if (!refreshRes.ok) {
-    const errText = await refreshRes.text();
     await supabase.from("connections").update({ is_valid: false }).eq("id", connectionId);
-    throw new Error(`Token refresh failed for ${connection.provider} (HTTP ${refreshRes.status}): ${errText}`);
+    console.error(`[oauth-token] refresh failed for ${connection.provider} (HTTP ${refreshRes.status}): ${respText.slice(0, 500)}`);
+    throw new Error(`Token refresh failed for ${connection.provider} (HTTP ${refreshRes.status}): ${respText}`);
   }
 
   let refreshed: StoredTokens;
   try {
-    refreshed = await refreshRes.json();
+    refreshed = JSON.parse(respText);
   } catch {
-    const raw = await refreshRes.text().catch(() => "(unreadable)");
-    throw new Error(`Token refresh for ${connection.provider} returned non-JSON: ${raw.slice(0, 200)}`);
+    throw new Error(`Token refresh for ${connection.provider} returned non-JSON: ${respText.slice(0, 200)}`);
   }
   if (!refreshed.access_token) {
     throw new Error(`Token refresh for ${connection.provider} succeeded but response has no access_token. Keys: ${Object.keys(refreshed).join(", ")}`);

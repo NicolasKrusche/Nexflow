@@ -37,6 +37,7 @@ export async function GET(request: Request) {
       code,
       redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/connections/oauth/notion/callback`,
     }),
+    cache: "no-store",
   });
 
   if (!tokenRes.ok) return NextResponse.redirect(`${origin}/connections?error=token_exchange_failed`);

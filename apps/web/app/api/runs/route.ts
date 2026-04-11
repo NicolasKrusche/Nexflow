@@ -126,6 +126,7 @@ export async function POST(request: Request) {
         triggered_by: "manual",
         connections: Object.fromEntries(connections.map((c) => [c.name, c.id])),
       }),
+      cache: "no-store",
     });
     if (!runtimeRes.ok) {
       await markFailed(`Runtime rejected execution (${runtimeRes.status})`);

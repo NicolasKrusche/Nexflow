@@ -137,6 +137,7 @@ export async function POST(
                 source_run_id: params.id,
               },
             }),
+            cache: "no-store",
           }).catch(() => {});
 
           // Update trigger last_fired_at

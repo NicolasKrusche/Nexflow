@@ -38,6 +38,7 @@ export async function GET(request: Request) {
       redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/connections/oauth/gmail/callback`,
       grant_type: "authorization_code",
     }),
+    cache: "no-store",
   });
 
   if (!tokenRes.ok) {
@@ -49,6 +50,7 @@ export async function GET(request: Request) {
   // Get user's email for metadata
   const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v1/userinfo?alt=json", {
     headers: { Authorization: `Bearer ${tokens.access_token}` },
+    cache: "no-store",
   });
   const userInfo = userInfoRes.ok ? await userInfoRes.json() : {};
 

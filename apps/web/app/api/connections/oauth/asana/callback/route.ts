@@ -31,6 +31,7 @@ export async function GET(request: Request) {
       redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/connections/oauth/asana/callback`,
       code,
     }),
+    cache: "no-store",
   });
 
   if (!tokenRes.ok) return NextResponse.redirect(`${origin}/connections?error=token_exchange_failed`);

@@ -31,6 +31,7 @@ export async function GET(request: Request) {
       redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/connections/oauth/hubspot/callback`,
       code,
     }),
+    cache: "no-store",
   });
 
   if (!tokenRes.ok) return NextResponse.redirect(`${origin}/connections?error=token_exchange_failed`);
@@ -38,7 +39,7 @@ export async function GET(request: Request) {
   const tokens = await tokenRes.json();
 
   // Fetch portal info for metadata
-  const portalRes = await fetch("https://api.hubapi.com/oauth/v1/access-tokens/" + tokens.access_token);
+  const portalRes = await fetch("https://api.hubapi.com/oauth/v1/access-tokens/" + tokens.access_token, { cache: "no-store" });
   const portalInfo = portalRes.ok ? await portalRes.json() : {};
 
   const serviceClient = createServiceClient();

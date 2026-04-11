@@ -33,6 +33,7 @@ export async function GET(request: Request) {
       code,
       redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/connections/oauth/github/callback`,
     }),
+    cache: "no-store",
   });
 
   if (!tokenRes.ok) return NextResponse.redirect(`${origin}/connections?error=token_exchange_failed`);
@@ -45,6 +46,7 @@ export async function GET(request: Request) {
       Authorization: `Bearer ${tokens.access_token}`,
       Accept: "application/vnd.github+json",
     },
+    cache: "no-store",
   });
   const ghUser = userRes.ok ? await userRes.json() : {};
 

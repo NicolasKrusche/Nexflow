@@ -136,15 +136,10 @@ If the operation is user-facing (Genesis could plausibly generate it), document 
 
 Do not implement any of the following — they are explicitly out of scope:
 
-- Multi-user workspaces or team features
 - Native mobile app (PWA only)
-- Crypto payments / wallets
-- Agent email addresses
-- Template marketplace
 - Custom connector builder
 - White-label / embedding
 - Enterprise SSO
-- Analytics dashboard
 
 If a feature isn't in the 22-week plan, it doesn't ship in MVP.
 

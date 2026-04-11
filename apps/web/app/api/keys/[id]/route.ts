@@ -77,18 +77,21 @@ async function probeKey(provider: string, key: string): Promise<boolean> {
     if (provider === "anthropic") {
       const res = await fetch("https://api.anthropic.com/v1/models", {
         headers: { "x-api-key": key, "anthropic-version": "2023-06-01" },
+        cache: "no-store",
       });
       return res.ok;
     }
     if (provider === "openai") {
       const res = await fetch("https://api.openai.com/v1/models", {
         headers: { Authorization: `Bearer ${key}` },
+        cache: "no-store",
       });
       return res.ok;
     }
     if (provider === "google") {
       const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`,
+        { cache: "no-store" }
       );
       return res.ok;
     }

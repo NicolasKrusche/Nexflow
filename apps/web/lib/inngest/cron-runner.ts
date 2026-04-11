@@ -88,6 +88,7 @@ export const cronRunner = inngest.createFunction(
             triggered_by: "cron",
             trigger_payload: { trigger_id: trigger.id },
           }),
+          cache: "no-store",
         }).catch(() => {});
 
         fired++;

@@ -173,6 +173,7 @@ export async function dispatchEventTriggers(
           trigger_payload: triggerPayload,
           connections: connectionNameToId,
         }),
+        cache: "no-store",
       }).catch(() => {});
     })
   );

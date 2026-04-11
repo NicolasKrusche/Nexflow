@@ -30,6 +30,7 @@ export async function GET(request: Request) {
       client_secret: process.env.SLACK_CLIENT_SECRET!,
       redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/connections/oauth/slack/callback`,
     }),
+    cache: "no-store",
   });
 
   if (!tokenRes.ok) return NextResponse.redirect(`${origin}/connections?error=token_exchange_failed`);

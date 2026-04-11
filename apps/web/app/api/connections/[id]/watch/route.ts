@@ -97,6 +97,7 @@ async function _setupGmailWatch(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(watchReqBody),
+    cache: "no-store",
   });
 
   if (!watchRes.ok) {
@@ -181,6 +182,7 @@ async function _setupSheetsWatch(
         address: `${appUrl}/api/webhooks/sheets`,
         token: watchToken,
       }),
+      cache: "no-store",
     }
   );
 
@@ -331,6 +333,7 @@ async function _setupGitHubWatch(
       "X-GitHub-Api-Version": "2022-11-28",
     },
     body: JSON.stringify(hookBody),
+    cache: "no-store",
   });
 
   if (!ghRes.ok) {

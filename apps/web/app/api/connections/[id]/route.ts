@@ -86,6 +86,7 @@ async function pingProvider(provider: string, accessToken: string): Promise<bool
       case "drive":
         return (await fetch("https://www.googleapis.com/oauth2/v1/userinfo?alt=json", {
           headers: { Authorization: `Bearer ${accessToken}` },
+          cache: "no-store",
         })).ok;
 
       case "notion":
@@ -94,11 +95,13 @@ async function pingProvider(provider: string, accessToken: string): Promise<bool
             Authorization: `Bearer ${accessToken}`,
             "Notion-Version": "2022-06-28",
           },
+          cache: "no-store",
         })).ok;
 
       case "slack": {
         const res = await fetch("https://slack.com/api/auth.test", {
           headers: { Authorization: `Bearer ${accessToken}` },
+          cache: "no-store",
         });
         const data = await res.json() as { ok: boolean };
         return data.ok === true;
@@ -110,29 +113,36 @@ async function pingProvider(provider: string, accessToken: string): Promise<bool
             Authorization: `Bearer ${accessToken}`,
             "X-GitHub-Api-Version": "2022-11-28",
           },
+          cache: "no-store",
         })).ok;
 
       case "airtable":
         return (await fetch("https://api.airtable.com/v0/meta/whoami", {
           headers: { Authorization: `Bearer ${accessToken}` },
+          cache: "no-store",
         })).ok;
 
       case "hubspot":
-        return (await fetch(`https://api.hubapi.com/oauth/v1/access-tokens/${accessToken}`)).ok;
+        return (await fetch(`https://api.hubapi.com/oauth/v1/access-tokens/${accessToken}`, {
+          cache: "no-store",
+        })).ok;
 
       case "outlook":
         return (await fetch("https://graph.microsoft.com/v1.0/me", {
           headers: { Authorization: `Bearer ${accessToken}` },
+          cache: "no-store",
         })).ok;
 
       case "asana":
         return (await fetch("https://app.asana.com/api/1.0/users/me", {
           headers: { Authorization: `Bearer ${accessToken}` },
+          cache: "no-store",
         })).ok;
 
       case "typeform":
         return (await fetch("https://api.typeform.com/me", {
           headers: { Authorization: `Bearer ${accessToken}` },
+          cache: "no-store",
         })).ok;
 
       default:

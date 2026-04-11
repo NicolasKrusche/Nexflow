@@ -138,6 +138,7 @@ async function _fetchGmailHistoryDelta(
       )}&historyTypes=messageAdded&maxResults=50`,
       {
         headers: { Authorization: `Bearer ${accessToken}` },
+        cache: "no-store",
       }
     );
 
