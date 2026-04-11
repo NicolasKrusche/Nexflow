@@ -3,10 +3,23 @@ import { createServiceClient, apiError } from "@/lib/api";
 import { upsertOAuthConnection } from "@/lib/oauth-token";
 
 const SCOPES_STORED: Record<string, string[]> = {
-  sheets: ["spreadsheets.readonly", "spreadsheets", "drive.readonly"],
-  calendar: ["calendar.readonly", "calendar"],
-  docs: ["documents.readonly", "documents"],
-  drive: ["drive.readonly", "drive"],
+  sheets: [
+    "https://www.googleapis.com/auth/spreadsheets.readonly",
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive.readonly",
+  ],
+  calendar: [
+    "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/calendar",
+  ],
+  docs: [
+    "https://www.googleapis.com/auth/documents.readonly",
+    "https://www.googleapis.com/auth/documents",
+  ],
+  drive: [
+    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/drive",
+  ],
 };
 
 export async function GET(request: Request) {

@@ -61,7 +61,11 @@ export async function GET(request: Request) {
       provider: "gmail",
       label,
       tokens,
-      scopes: ["gmail.readonly", "gmail.modify", "gmail.send"],
+      scopes: [
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/gmail.modify",
+        "https://www.googleapis.com/auth/gmail.send",
+      ],
       metadata: { email: userInfo.email ?? null },
     });
   } catch {

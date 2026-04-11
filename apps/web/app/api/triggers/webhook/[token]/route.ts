@@ -106,25 +106,57 @@ export async function POST(
     .update({ last_fired_at: new Date().toISOString() })
     .eq("id", trigger.id);
 
-  // Dispatch to runtime (fire and forget)
+  // Fetch connection name→id map for this program
+  const { data: linkedConnsRaw } = await db
+    .from("program_connections")
+    .select("connection_id, connections(id, name)")
+    .eq("program_id", trigger.program_id);
+
+  const connectionNameToId: Record<string, string> = {};
+  for (const row of (linkedConnsRaw ?? []) as Array<{
+    connection_id: string;
+    connections: { id: string; name: string } | null;
+  }>) {
+    if (row.connections) connectionNameToId[row.connections.name] = row.connections.id;
+  }
+
+  // Dispatch to runtime
   const runtimeUrl = process.env.RUNTIME_URL ?? "http://localhost:8000";
   const runtimeSecret = process.env.RUNTIME_SECRET ?? "";
-  fetch(`${runtimeUrl}/execute`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-runtime-secret": runtimeSecret,
-    },
-    body: JSON.stringify({
-      run_id: run.id,
-      program_id: trigger.program_id,
-      user_id: program.user_id,
-      schema: program.schema,
-      triggered_by: "webhook",
-      trigger_payload: { trigger_id: trigger.id, webhook_payload: payload },
-    }),
-    cache: "no-store",
-  }).catch(() => {});
+  const triggerPayload = { trigger_id: trigger.id, webhook_payload: payload };
+
+  try {
+    const runtimeRes = await fetch(`${runtimeUrl}/execute`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-runtime-secret": runtimeSecret,
+      },
+      body: JSON.stringify({
+        run_id: run.id,
+        program_id: trigger.program_id,
+        user_id: program.user_id,
+        schema: program.schema,
+        triggered_by: "webhook",
+        trigger_payload: triggerPayload,
+        connections: connectionNameToId,
+      }),
+      cache: "no-store",
+    });
+    if (!runtimeRes.ok) {
+      await db
+        .from("runs")
+        .update({ status: "failed", error_message: `Runtime rejected execution (${runtimeRes.status})`, completed_at: new Date().toISOString() })
+        .eq("id", run.id);
+      return NextResponse.json({ error: "Runtime failed to accept the run" }, { status: 502 });
+    }
+  } catch {
+    await db
+      .from("runs")
+      .update({ status: "failed", error_message: "Runtime is unreachable", completed_at: new Date().toISOString() })
+      .eq("id", run.id);
+    return NextResponse.json({ error: "Runtime is unreachable" }, { status: 503 });
+  }
 
   return NextResponse.json({ run_id: run.id, status: "running" }, { status: 202 });
 }

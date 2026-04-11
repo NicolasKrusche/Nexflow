@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { RunPanel } from "./run-panel";
 import { ExecutionControls } from "./execution-controls";
+import { PublishPanel } from "./publish-panel";
 import { DeleteProgramButton } from "@/components/programs/delete-program-button";
 import type { Json } from "@flowos/db";
 import { createServiceClient } from "@/lib/api";
@@ -29,14 +30,22 @@ export default async function ProgramPage({ params }: { params: { id: string } }
 
   const { data, error } = await supabase
     .from("programs")
-    .select("id, name, description, execution_mode, conflict_policy, is_active, schema, schema_version, last_run_at, updated_at")
+    .select("id, name, description, execution_mode, conflict_policy, is_active, schema, schema_version, last_run_at, updated_at, is_public, tags, fork_count, published_at, public_author_name")
     .eq("id", params.id)
     .eq("user_id", user.id)
     .single();
 
   if (error || !data) return notFound();
 
-  type ProgramRow = typeof data & { schema: Json; conflict_policy: string };
+  type ProgramRow = typeof data & {
+    schema: Json;
+    conflict_policy: string;
+    is_public: boolean;
+    tags: string[];
+    fork_count: number;
+    published_at: string | null;
+    public_author_name: string | null;
+  };
   const program = data as ProgramRow;
   const { nodes, edges, triggers } = parseSchema(program.schema);
 
@@ -71,6 +80,13 @@ export default async function ProgramPage({ params }: { params: { id: string } }
     const uniq = new Set((sharedLinks ?? []).map((r: { program_id: string }) => r.program_id));
     conflictingProgramCount = uniq.size;
   }
+
+  // Check for at least one successful run (gates publish)
+  const { count: successfulRunCount } = await serviceClient
+    .from("runs")
+    .select("id", { count: "exact", head: true })
+    .eq("program_id", params.id)
+    .eq("status", "completed");
 
   const NODE_BADGE: Record<string, "default" | "secondary" | "outline"> = {
     trigger: "default",
@@ -213,6 +229,19 @@ export default async function ProgramPage({ params }: { params: { id: string } }
 
       {/* Run panel */}
       <RunPanel programId={program.id} />
+
+      {/* Publish panel */}
+      <PublishPanel
+        programId={program.id}
+        initialState={{
+          is_public: program.is_public ?? false,
+          tags: program.tags ?? [],
+          fork_count: program.fork_count ?? 0,
+          published_at: program.published_at ?? null,
+          public_author_name: program.public_author_name ?? null,
+        }}
+        hasSuccessfulRun={(successfulRunCount ?? 0) > 0}
+      />
 
       {/* Raw schema */}
       <details>

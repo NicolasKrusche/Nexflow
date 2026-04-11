@@ -44,7 +44,7 @@ class NotionConnector(IConnector):
                     and not parent_id.startswith("http")
                     and not _UUID_RE.fullmatch(parent_id)
                     and not _HEX32_RE.fullmatch(parent_id)):
-                print(f"[notion] intercepted create_page with non-UUID parent_id '{parent_id}' → create_database_entry", flush=True)
+                print(f"[notion] intercepted create_page with non-UUID parent_id '{parent_id}' -> create_database_entry", flush=True)
                 redirect_params: dict[str, Any] = {"database_id": parent_id}
                 if params.get("title"):
                     redirect_params["_title"] = str(params["title"])

@@ -35,7 +35,6 @@ export const cronRunner = inngest.createFunction(
     // ── 2. For each due trigger, dispatch a run ────────────────────────────
     const runtimeUrl = process.env.RUNTIME_URL ?? "http://localhost:8000";
     const runtimeSecret = process.env.RUNTIME_SECRET ?? "";
-    const nextjsUrl = process.env.NEXTJS_INTERNAL_URL ?? "http://localhost:3000";
 
     let fired = 0;
 
@@ -73,23 +72,41 @@ export const cronRunner = inngest.createFunction(
           return;
         }
 
-        // Fire-and-forget to Python runtime
-        fetch(`${runtimeUrl}/execute`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-runtime-secret": runtimeSecret,
-          },
-          body: JSON.stringify({
-            run_id: (run as { id: string }).id,
-            program_id: trigger.program_id,
-            user_id: (program as Record<string, unknown>).user_id,
-            schema: (program as Record<string, unknown>).schema,
-            triggered_by: "cron",
-            trigger_payload: { trigger_id: trigger.id },
-          }),
-          cache: "no-store",
-        }).catch(() => {});
+        // Dispatch to Python runtime
+        const runId = (run as { id: string }).id;
+        try {
+          const runtimeRes = await fetch(`${runtimeUrl}/execute`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-runtime-secret": runtimeSecret,
+            },
+            body: JSON.stringify({
+              run_id: runId,
+              program_id: trigger.program_id,
+              user_id: (program as Record<string, unknown>).user_id,
+              schema: (program as Record<string, unknown>).schema,
+              triggered_by: "cron",
+              trigger_payload: { trigger_id: trigger.id },
+            }),
+            cache: "no-store",
+          });
+          if (!runtimeRes.ok) {
+            logger.error(`Runtime rejected cron run ${runId} (${runtimeRes.status})`);
+            await db
+              .from("runs")
+              .update({ status: "failed", error_message: `Runtime rejected execution (${runtimeRes.status})`, completed_at: new Date().toISOString() })
+              .eq("id", runId);
+            return;
+          }
+        } catch {
+          logger.error(`Runtime unreachable for cron run ${runId}`);
+          await db
+            .from("runs")
+            .update({ status: "failed", error_message: "Runtime is unreachable", completed_at: new Date().toISOString() })
+            .eq("id", runId);
+          return;
+        }
 
         fired++;
 

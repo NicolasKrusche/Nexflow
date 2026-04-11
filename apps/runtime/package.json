@@ -3,6 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "venv\\Scripts\\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8002 --reload 2>nul || venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8002 --reload"
+    "dev": "set PYTHONUTF8=1 && venv\\Scripts\\python.exe -m uvicorn main:app --host 0.0.0.0 --port 8002 --reload 2>nul || PYTHONUTF8=1 venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8002 --reload"
   }
 }

@@ -158,23 +158,38 @@ export async function dispatchEventTriggers(
         }
       }
 
-      fetch(`${runtimeUrl}/execute`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-runtime-secret": runtimeSecret,
-        },
-        body: JSON.stringify({
-          run_id: run.id,
-          program_id: trigger.program_id,
-          user_id: program.user_id,
-          schema: program.schema,
-          triggered_by: triggeredBy,
-          trigger_payload: triggerPayload,
-          connections: connectionNameToId,
-        }),
-        cache: "no-store",
-      }).catch(() => {});
+      try {
+        const runtimeRes = await fetch(`${runtimeUrl}/execute`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-runtime-secret": runtimeSecret,
+          },
+          body: JSON.stringify({
+            run_id: run.id,
+            program_id: trigger.program_id,
+            user_id: program.user_id,
+            schema: program.schema,
+            triggered_by: triggeredBy,
+            trigger_payload: triggerPayload,
+            connections: connectionNameToId,
+          }),
+          cache: "no-store",
+        });
+        if (!runtimeRes.ok) {
+          await db
+            .from("runs")
+            .update({ status: "failed", error_message: `Runtime rejected execution (${runtimeRes.status})`, completed_at: new Date().toISOString() })
+            .eq("id", run.id);
+          return;
+        }
+      } catch {
+        await db
+          .from("runs")
+          .update({ status: "failed", error_message: "Runtime is unreachable", completed_at: new Date().toISOString() })
+          .eq("id", run.id);
+        return;
+      }
     })
   );
 

@@ -193,7 +193,23 @@
       "Bash(powershell -Command 'Get-Process python | ForEach-Object { $id = $_.Id; $cmd = \\(Get-CimInstance Win32_Process -Filter \"ProcessId = $id\"\\).CommandLine; if \\($cmd -match '\\\\''uvicorn'\\\\''\\) { Write-Host \"PID $id - $cmd\" } }')",
       "Bash(powershell -Command \"Stop-Process -Id 38072, 52380 -Force -ErrorAction SilentlyContinue; Start-Sleep 1; Start-Process powershell -ArgumentList '-NoExit', '-Command', 'cd H:\\\\Archon\\\\ARCHON_1\\\\apps\\\\runtime; .\\\\venv\\\\Scripts\\\\Activate.ps1; python -m uvicorn main:app --host 0.0.0.0 --port 8002 --reload --reload-dir .' -WindowStyle Normal; Write-Host 'Runtime restarted'\")",
       "Bash(powershell -Command \"Stop-Process -Id 38072, 52380 -Force -ErrorAction SilentlyContinue; Write-Host 'killed'\")",
-      "Bash(powershell -Command 'Get-Process python | ForEach-Object { $id = $_.Id; $cmd = \\(Get-CimInstance Win32_Process -Filter \"ProcessId = $id\"\\).CommandLine; if \\($cmd -match '\\\\''uvicorn'\\\\''\\) { Write-Host \"UP: PID $id\" } }')"
+      "Bash(powershell -Command 'Get-Process python | ForEach-Object { $id = $_.Id; $cmd = \\(Get-CimInstance Win32_Process -Filter \"ProcessId = $id\"\\).CommandLine; if \\($cmd -match '\\\\''uvicorn'\\\\''\\) { Write-Host \"UP: PID $id\" } }')",
+      "Bash(echo \"Next.js PID: $!\")",
+      "Bash(python -m uvicorn main:app --reload --port 8000)",
+      "Bash(echo \"Runtime PID: $!\")",
+      "Bash(curl -s http://localhost:3000/ -o /dev/null -w \"%{http_code}\")",
+      "Bash(H:/Archon/ARCHON_1/apps/runtime/venv/Scripts/python.exe -c \"import apscheduler; print\\('ok'\\)\")",
+      "Bash(curl -s http://localhost:8002/)",
+      "Bash(tasklist /FI \"PID eq 52068\" /FO LIST)",
+      "Bash(kill 1604)",
+      "Bash(wmic process:*)",
+      "Bash(taskkill //F //PID 45560)",
+      "Bash(taskkill //F //PID 15260)",
+      "Bash(grep -rn \"→\\\\|\\\\\\\\\\\\\\\\u2192\\\\|arrow\" H:/Archon/ARCHON_1/apps/runtime/ --include=\"*.py\")",
+      "Bash(taskkill //F //PID 52068)",
+      "Bash(find /h/Archon/ARCHON_1/apps/web/components/ui -name \"*.tsx\" -exec basename {} \\\\;)",
+      "Bash(supabase --version)",
+      "Bash(curl -s \"http://localhost:3000/api/browse\")"
     ]
   }
 }

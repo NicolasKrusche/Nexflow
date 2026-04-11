@@ -97,17 +97,33 @@ export async function POST(
             // queue: proceed (runtime will queue)
           }
 
+          // Fetch connection name→id map for this downstream program
+          const { data: linkedConnsRaw } = await db
+            .from("program_connections")
+            .select("connection_id, connections(id, name)")
+            .eq("program_id", trigger.program_id);
+
+          const connectionNameToId: Record<string, string> = {};
+          for (const row of (linkedConnsRaw ?? []) as Array<{
+            connection_id: string;
+            connections: { id: string; name: string } | null;
+          }>) {
+            if (row.connections) connectionNameToId[row.connections.name] = row.connections.id;
+          }
+
+          const downstreamTriggerPayload = {
+            trigger_id: trigger.id,
+            source_program_id: program_id,
+            source_run_id: params.id,
+          };
+
           // Create downstream run
           const { data: downRun } = await db
             .from("runs")
             .insert({
               program_id: trigger.program_id,
               triggered_by: "program",
-              trigger_payload: {
-                trigger_id: trigger.id,
-                source_program_id: program_id,
-                source_run_id: params.id,
-              },
+              trigger_payload: downstreamTriggerPayload,
               status: "running",
               started_at: new Date().toISOString(),
               execution_mode: prog.execution_mode,
@@ -119,26 +135,39 @@ export async function POST(
 
           const runId = (downRun as unknown as { id: string }).id;
 
-          // Fire to runtime
-          fetch(`${runtimeUrl}/execute`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-runtime-secret": runtimeSecret,
-            },
-            body: JSON.stringify({
-              run_id: runId,
-              program_id: trigger.program_id,
-              user_id: prog.user_id,
-              schema: prog.schema,
-              triggered_by: "program",
-              trigger_payload: {
-                source_program_id: program_id,
-                source_run_id: params.id,
+          // Dispatch to runtime
+          try {
+            const runtimeRes = await fetch(`${runtimeUrl}/execute`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-runtime-secret": runtimeSecret,
               },
-            }),
-            cache: "no-store",
-          }).catch(() => {});
+              body: JSON.stringify({
+                run_id: runId,
+                program_id: trigger.program_id,
+                user_id: prog.user_id,
+                schema: prog.schema,
+                triggered_by: "program",
+                trigger_payload: downstreamTriggerPayload,
+                connections: connectionNameToId,
+              }),
+              cache: "no-store",
+            });
+            if (!runtimeRes.ok) {
+              await db
+                .from("runs")
+                .update({ status: "failed", error_message: `Runtime rejected execution (${runtimeRes.status})`, completed_at: new Date().toISOString() })
+                .eq("id", runId);
+              continue;
+            }
+          } catch {
+            await db
+              .from("runs")
+              .update({ status: "failed", error_message: "Runtime is unreachable", completed_at: new Date().toISOString() })
+              .eq("id", runId);
+            continue;
+          }
 
           // Update trigger last_fired_at
           await db
