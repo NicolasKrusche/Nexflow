@@ -36,6 +36,23 @@ class NotionConnector(IConnector):
             "Notion-Version": _VERSION,
             "Content-Type": "application/json",
         }
+        # Intercept create_page with a non-UUID parent_id — the model almost certainly
+        # meant create_database_entry. Redirect before any HTTP call is made.
+        if operation == "create_page":
+            parent_id = str(params.get("parent_id", "")).strip()
+            if (parent_id
+                    and not parent_id.startswith("http")
+                    and not _UUID_RE.fullmatch(parent_id)
+                    and not _HEX32_RE.fullmatch(parent_id)):
+                print(f"[notion] intercepted create_page with non-UUID parent_id '{parent_id}' → create_database_entry", flush=True)
+                redirect_params: dict[str, Any] = {"database_id": parent_id}
+                if params.get("title"):
+                    redirect_params["_title"] = str(params["title"])
+                if params.get("content"):
+                    redirect_params["_body"] = str(params["content"])
+                operation = "create_database_entry"
+                params = redirect_params
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             match operation:
                 case "read_page":
@@ -81,6 +98,17 @@ class NotionConnector(IConnector):
         title = params.get("title", "Untitled")
         if not parent_id:
             raise ConnectorError("MISSING_PARAM", "create_page requires 'parent_id'")
+        # Safety net: if parent_id is a plain name (not a UUID/URL), the model
+        # almost certainly meant create_database_entry — redirect automatically.
+        parent_str = str(parent_id).strip()
+        if (not parent_str.startswith("http")
+                and not _UUID_RE.fullmatch(parent_str)
+                and not _HEX32_RE.fullmatch(parent_str)):
+            print(f"[notion] create_page got non-UUID parent_id '{parent_str}' — redirecting to create_database_entry", flush=True)
+            redirect_params = {"database_id": parent_str, "_title": title}
+            if params.get("content"):
+                redirect_params["_body"] = str(params["content"])
+            return await self._create_database_entry(client, headers, redirect_params)
         body: dict[str, Any] = {
             "parent": {"type": "page_id", "page_id": parent_id},
             "properties": {

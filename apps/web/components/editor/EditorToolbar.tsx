@@ -27,6 +27,8 @@ interface EditorToolbarProps {
   showPalette: boolean;
   onTogglePalette: () => void;
   onHistory: () => void;
+  /** Present only when the trigger is a webhook — shows the Test button. */
+  onTestWebhook?: () => void;
 }
 
 // ─── Icons (inline SVG, no icon library dep) ─────────────────────────────────
@@ -110,6 +112,7 @@ export function EditorToolbar({
   showPalette,
   onTogglePalette,
   onHistory,
+  onTestWebhook,
 }: EditorToolbarProps) {
   const hasErrors = validationResult && !validationResult.valid;
   const isValid = validationResult?.valid === true;
@@ -263,6 +266,24 @@ export function EditorToolbar({
         <SaveIcon />
         {isSaving ? "Saving…" : "Save"}
       </Button>
+
+      {/* Test webhook — only visible when trigger is a webhook */}
+      {onTestWebhook && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onTestWebhook}
+          disabled={isRunning}
+          className="gap-1.5 text-muted-foreground hover:text-foreground"
+          title="Send a test payload to this webhook trigger"
+        >
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.75} className="h-3.5 w-3.5">
+            <path d="M2 8h9M8 5l3 3-3 3" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="13" cy="8" r="1.5" fill="currentColor" stroke="none" />
+          </svg>
+          Test webhook
+        </Button>
+      )}
 
       {/* Run */}
       <div className="relative group">

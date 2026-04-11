@@ -9,7 +9,7 @@ export const maxDuration = 300;
 import { createServerClient } from "@/lib/supabase/server";
 import { apiError, createServiceClient } from "@/lib/api";
 import { vaultRetrieve } from "@/lib/vault";
-import { GENESIS_SYSTEM_PROMPT, buildGenesisUserMessage } from "@/lib/genesis/prompt";
+import { GENESIS_SYSTEM_PROMPT, buildGenesisUserMessage, buildRefinementUserMessage } from "@/lib/genesis/prompt";
 import { ProgramSchemaZ } from "@flowos/schema";
 import { validatePostGenesis } from "@/lib/validation";
 
@@ -18,6 +18,9 @@ const RequestSchema = z.object({
   connection_ids: z.array(z.string().uuid()).max(10),
   api_key_id: z.string().uuid(),
   model: z.string().min(1),
+  existing_schema: z.unknown().optional(),
+  refinement: z.string().max(500).optional(),
+  existing_program_id: z.string().uuid().optional(),
 });
 
 // POST /api/genesis — generate a program schema from a description
@@ -30,7 +33,8 @@ export async function POST(request: Request) {
   const parsed = RequestSchema.safeParse(body);
   if (!parsed.success) return apiError(parsed.error.message, 400);
 
-  const { description, connection_ids, api_key_id, model } = parsed.data;
+  const { description, connection_ids, api_key_id, model, existing_schema, refinement, existing_program_id } = parsed.data;
+  const isRefinement = !!(existing_schema && refinement && existing_program_id);
 
   // Resolve the selected connections
   const { data: connections, error: connError } = await supabase
@@ -91,11 +95,14 @@ export async function POST(request: Request) {
       if (useAnthropicSDK) {
         // Stream to keep the connection alive during long generations
         const anthropic = new Anthropic({ apiKey: anthropicApiKey });
+        const userMessage = isRefinement
+          ? buildRefinementUserMessage(existing_schema, refinement!, availableConnections)
+          : buildGenesisUserMessage(description, availableConnections);
         const stream = anthropic.messages.stream({
           model,
           max_tokens: 8192,
           system: GENESIS_SYSTEM_PROMPT,
-          messages: [{ role: "user", content: buildGenesisUserMessage(description, availableConnections) }],
+          messages: [{ role: "user", content: userMessage }],
         });
         const msg = await stream.finalMessage();
         rawText = msg.content[0]?.type === "text" ? (msg.content[0] as { type: "text"; text: string }).text : "";
@@ -119,7 +126,12 @@ export async function POST(request: Request) {
           stream: true,
           messages: [
             { role: "system", content: GENESIS_SYSTEM_PROMPT },
-            { role: "user", content: buildGenesisUserMessage(description, availableConnections) },
+            {
+              role: "user",
+              content: isRefinement
+                ? buildRefinementUserMessage(existing_schema, refinement!, availableConnections)
+                : buildGenesisUserMessage(description, availableConnections),
+            },
           ],
         });
         rawText = "";
@@ -135,11 +147,15 @@ export async function POST(request: Request) {
         await new Promise((r) => setTimeout(r, attempt * 2000));
         continue;
       }
-      return apiError(`Genesis model call failed: ${(err as Error).message}`, 502);
+      const errMsg = (err as Error).message ?? String(err);
+      const causeMsg = (err as { cause?: { message?: string } })?.cause?.message;
+      return apiError(`Genesis model call failed: ${causeMsg ?? errMsg}`, 502);
     }
   }
   if (!rawText!) {
-    return apiError(`Genesis model call failed after 3 attempts: ${(lastErr as Error)?.message ?? "empty response"}`, 502);
+    const lastErrMsg = (lastErr as Error)?.message ?? "empty response";
+    const lastCauseMsg = (lastErr as { cause?: { message?: string } })?.cause?.message;
+    return apiError(`Genesis model call failed after 3 attempts: ${lastCauseMsg ?? lastErrMsg}`, 502);
   }
 
   // ── Parse the response — three-layer recovery ───────────────────────────
@@ -260,9 +276,54 @@ export async function POST(request: Request) {
   const schema = schemaResult.data;
 
   // Run post-genesis validation
-  const validation = validatePostGenesis(schema, connections ?? []);
+  const connectionRows = (connections ?? []) as unknown as { id: string; name: string; provider: string; scopes: string[] | null }[];
+  const validation = validatePostGenesis(schema, connectionRows);
 
-  // Persist the program
+  // ── Refinement path: update existing program ─────────────────────────────
+  if (isRefinement) {
+    // Verify ownership and get current version
+    const { data: rawExisting, error: fetchError } = await supabase
+      .from("programs")
+      .select("id, schema_version")
+      .eq("id", existing_program_id!)
+      .eq("user_id", user.id)
+      .single();
+
+    if (fetchError || !rawExisting) return apiError("Existing program not found", 404);
+
+    const existingRow = rawExisting as unknown as { id: string; schema_version: number | null };
+    const nextVersion = (existingRow.schema_version ?? 0) + 1;
+    const now = new Date().toISOString();
+
+    const { data: updatedProgram, error: updateError } = await supabase
+      .from("programs")
+      .update({
+        name: schema.program_name,
+        schema: schema as unknown as Record<string, unknown>,
+        execution_mode: schema.execution_mode === "approval_required" ? "supervised" : schema.execution_mode,
+        schema_version: nextVersion,
+        updated_at: now,
+      } as unknown as never)
+      .eq("id", existing_program_id!)
+      .eq("user_id", user.id)
+      .select("id, name, description, execution_mode, is_active, created_at")
+      .single();
+
+    if (updateError) return apiError(updateError.message, 500);
+
+    // Store refinement snapshot
+    const { error: versionErr } = await supabase.from("program_versions").insert({
+      program_id: existing_program_id!,
+      version: nextVersion,
+      schema: schema as unknown as Record<string, unknown>,
+      change_summary: `Refined — ${refinement!.slice(0, 120)}`,
+    } as unknown as never);
+    if (versionErr) console.error("[genesis] Failed to store refinement version:", versionErr.message);
+
+    return NextResponse.json({ program: updatedProgram, schema, validation }, { status: 200 });
+  }
+
+  // ── New program path ──────────────────────────────────────────────────────
   const { data: program, error: insertError } = await supabase
     .from("programs")
     .insert({

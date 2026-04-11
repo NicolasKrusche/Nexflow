@@ -42,9 +42,21 @@ import type { ProgramSchema, Node as SchemaNode } from "@flowos/schema";
 import type { ValidationResult } from "@/lib/validation";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import type { PreFlightCheck } from "@/lib/validation/pre-flight";
+
+// ─── Node execution data (populated from API + Realtime) ─────────────────────
+
+export interface NodeExecutionData {
+  status: SchemaNode["status"];
+  input_payload: unknown;
+  output_payload: unknown;
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+}
 
 // ─── Custom node/edge type registrations ─────────────────────────────────────
 
@@ -424,14 +436,21 @@ export function EditorShell({
           filter: `program_id=eq.${programId}`,
         },
         (payload) => {
-          // Update node status from realtime event
+          // Update node status and execution data from realtime event
           type NodeExecPayload = {
             node_id: string;
+            run_id?: string;
             status: SchemaNode["status"];
+            input_payload?: unknown;
+            output_payload?: unknown;
+            error_message?: string | null;
+            started_at?: string | null;
+            completed_at?: string | null;
           };
           const row = payload.new as NodeExecPayload | null;
           if (!row?.node_id || !row?.status) return;
 
+          // Update RF node visual status
           skipSyncRef.current = true;
           setRfNodes((prev) =>
             prev.map((n) =>
@@ -440,6 +459,24 @@ export function EditorShell({
                 : n
             )
           );
+
+          // Update execution inspector data
+          setNodeExecutions((prev) => ({
+            ...prev,
+            [row.node_id]: {
+              status: row.status,
+              input_payload: row.input_payload ?? null,
+              output_payload: row.output_payload ?? null,
+              error_message: row.error_message ?? null,
+              started_at: row.started_at ?? null,
+              completed_at: row.completed_at ?? null,
+            },
+          }));
+
+          // Track the run ID from the first realtime event we see
+          if (row.run_id) {
+            setLastRunId((prev) => prev ?? row.run_id ?? null);
+          }
         }
       )
       .subscribe();
@@ -630,6 +667,82 @@ export function EditorShell({
     [programId, linkedConnections, allConnections]
   );
 
+  // ── Node execution inspector state ───────────────────────────────────────
+
+  const [nodeExecutions, setNodeExecutions] = React.useState<Record<string, NodeExecutionData>>({});
+  const [lastRunId, setLastRunId] = React.useState<string | null>(null);
+
+  // On mount: fetch most recent run and populate nodeExecutions
+  useEffect(() => {
+    async function fetchLatestRun() {
+      try {
+        const listRes = await fetch(`/api/runs?program_id=${programId}`);
+        if (!listRes.ok) return;
+        const runs = await listRes.json() as Array<{ id: string }>;
+        if (!runs || runs.length === 0) return;
+        const runId = runs[0].id;
+        setLastRunId(runId);
+
+        const runRes = await fetch(`/api/runs/${runId}`);
+        if (!runRes.ok) return;
+        const run = await runRes.json() as { node_executions?: Array<{
+          node_id: string;
+          status: SchemaNode["status"];
+          input_payload: unknown;
+          output_payload: unknown;
+          error_message: string | null;
+          started_at: string | null;
+          completed_at: string | null;
+        }> };
+        if (!run.node_executions) return;
+
+        const byNodeId: Record<string, NodeExecutionData> = {};
+        for (const ne of run.node_executions) {
+          byNodeId[ne.node_id] = {
+            status: ne.status,
+            input_payload: ne.input_payload,
+            output_payload: ne.output_payload,
+            error_message: ne.error_message,
+            started_at: ne.started_at,
+            completed_at: ne.completed_at,
+          };
+        }
+        setNodeExecutions(byNodeId);
+      } catch {
+        // Non-critical — silently ignore
+      }
+    }
+    fetchLatestRun();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [programId]);
+
+  // ── Webhook test state ────────────────────────────────────────────────────
+
+  const hasWebhookTrigger = React.useMemo(
+    () =>
+      state.schema.nodes.some(
+        (n) =>
+          n.type === "trigger" &&
+          (n.config as Record<string, unknown>).trigger_type === "webhook"
+      ),
+    [state.schema.nodes]
+  );
+
+  const [showWebhookTest, setShowWebhookTest] = React.useState(false);
+  const [webhookPayload, setWebhookPayload] = React.useState('{\n  \n}');
+  const [webhookPayloadValid, setWebhookPayloadValid] = React.useState(false);
+
+  // Validate JSON on every keystroke
+  const handleWebhookPayloadChange = React.useCallback((value: string) => {
+    setWebhookPayload(value);
+    try {
+      JSON.parse(value);
+      setWebhookPayloadValid(true);
+    } catch {
+      setWebhookPayloadValid(false);
+    }
+  }, []);
+
   // ── Run ───────────────────────────────────────────────────────────────────
 
   const [isRunning, setIsRunning] = React.useState(false);
@@ -671,6 +784,55 @@ export function EditorShell({
       setIsRunning(false);
     }
   }, [state.validationResult, programId, router]);
+
+  // ── Test webhook ──────────────────────────────────────────────────────────
+
+  const handleTestWebhook = useCallback(async () => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(webhookPayload);
+    } catch {
+      // Shouldn't reach here — button is disabled when invalid — but guard anyway
+      return;
+    }
+
+    setIsRunning(true);
+    try {
+      const res = await fetch("/api/runs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ program_id: programId, trigger_payload: parsed }),
+      });
+      if (res.ok) {
+        const { run_id } = await res.json() as { run_id: string };
+        setShowWebhookTest(false);
+        router.push(`/programs/${programId}/runs/${run_id}`);
+      } else {
+        const body = await res.json().catch(() => null) as { checks?: PreFlightCheck[]; error?: string } | null;
+        setShowWebhookTest(false);
+        if (body?.checks) {
+          setPreFlightChecks(body.checks);
+        } else {
+          setPreFlightChecks([{
+            code: "PRE_001",
+            label: "Error",
+            status: "fail",
+            failures: [{ node_id: null, message: body?.error ?? "Failed to start test run", fix_suggestion: "" }],
+          }]);
+        }
+      }
+    } catch {
+      setShowWebhookTest(false);
+      setPreFlightChecks([{
+        code: "PRE_001",
+        label: "Connection error",
+        status: "fail",
+        failures: [{ node_id: null, message: "Could not reach the server.", fix_suggestion: "Make sure the runtime service is running." }],
+      }]);
+    } finally {
+      setIsRunning(false);
+    }
+  }, [webhookPayload, programId, router]);
 
   // ── Back navigation ───────────────────────────────────────────────────────
 
@@ -727,6 +889,7 @@ export function EditorShell({
             setShowPalette(false);
           }
         }}
+        onTestWebhook={hasWebhookTrigger ? () => setShowWebhookTest(true) : undefined}
       />
 
       {/* Node palette panel — slides in from left */}
@@ -792,9 +955,12 @@ export function EditorShell({
           <NodeSidebar
             nodeId={state.selectedNodeId}
             schema={state.schema}
+            programId={programId}
             apiKeys={apiKeys}
             connections={allConnections}
             validationResult={state.validationResult}
+            nodeExecutions={nodeExecutions}
+            lastRunId={lastRunId}
             onUpdate={handleSidebarUpdate}
             onClose={() => dispatch({ type: "SELECT_NODE", nodeId: null })}
             onDelete={(nodeId) => {
@@ -819,6 +985,47 @@ export function EditorShell({
           />
         )}
       </div>
+
+      {/* Webhook test dialog */}
+      <Dialog open={showWebhookTest} onOpenChange={(open) => { if (!open) setShowWebhookTest(false); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Test webhook trigger</DialogTitle>
+            <DialogDescription>
+              Paste a sample payload to test this webhook program. The run will start immediately.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <Textarea
+              rows={8}
+              className="font-mono text-xs resize-none"
+              value={webhookPayload}
+              onChange={(e) => handleWebhookPayloadChange(e.target.value)}
+              placeholder={'{\n  "key": "value"\n}'}
+              spellCheck={false}
+            />
+            <p className={cn(
+              "text-[11px] font-medium",
+              webhookPayloadValid ? "text-green-600 dark:text-green-400" : "text-destructive"
+            )}>
+              {webhookPayloadValid ? "JSON valid" : "Invalid JSON"}
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowWebhookTest(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleTestWebhook}
+              disabled={!webhookPayloadValid || isRunning}
+            >
+              {isRunning ? "Starting…" : "Send test"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Pre-flight failure dialog */}
       <Dialog open={!!preFlightChecks} onOpenChange={(open) => { if (!open) setPreFlightChecks(null); }}>

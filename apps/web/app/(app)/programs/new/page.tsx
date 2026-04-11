@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import type { ValidationResult } from "@/lib/validation";
+import { TEMPLATES } from "@/lib/templates";
 
 type Connection = {
   id: string;
@@ -45,6 +46,7 @@ const PROVIDER_LABELS: Record<string, string> = {
 export default function NewProgramPage() {
   const router = useRouter();
   const [step, setStep] = useState<Step>("describe");
+  const [generatingMessage, setGeneratingMessage] = useState("Generating your program…");
   const [description, setDescription] = useState("");
   const [connections, setConnections] = useState<Connection[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -57,6 +59,15 @@ export default function NewProgramPage() {
   const [model, setModel] = useState("");
   const [programId, setProgramId] = useState<string | null>(null);
   const [programName, setProgramName] = useState<string>("");
+  // Stored schema returned from genesis — used as input to the refinement call
+  const [generatedSchema, setGeneratedSchema] = useState<unknown>(null);
+  // Refinement loop state
+  const [refinement, setRefinement] = useState("");
+  const [isRefining, setIsRefining] = useState(false);
+  const [refinementError, setRefinementError] = useState<string | null>(null);
+  const [wasRefined, setWasRefined] = useState(false);
+  // Template import state
+  const [importingTemplateId, setImportingTemplateId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/connections")
@@ -72,7 +83,7 @@ export default function NewProgramPage() {
     anthropic: "claude-opus-4-6",
     openai: "gpt-4o",
     google: "gemini-1.5-pro",
-    groq: "llama-3.1-70b-versatile",
+    groq: "llama-3.3-70b-versatile",
     mistral: "mistral-large-latest",
     openrouter: "nvidia/nemotron-3-super-120b-a12b:free",
   };
@@ -102,7 +113,9 @@ export default function NewProgramPage() {
 
   async function handleGenerate() {
     setStep("generating");
+    setGeneratingMessage("Generating your program…");
     setGenesisError(null);
+    setWasRefined(false);
 
     const res = await fetch("/api/genesis", {
       method: "POST",
@@ -130,7 +143,74 @@ export default function NewProgramPage() {
     setProgramId(data.program.id);
     setProgramName(data.program.name);
     setValidationResult(data.validation);
+    setGeneratedSchema(data.schema);
     setStep("result");
+  }
+
+  async function handleRefine() {
+    if (!programId || !generatedSchema || !refinement.trim()) return;
+    setIsRefining(true);
+    setRefinementError(null);
+    setStep("generating");
+    setGeneratingMessage("Refining your program…");
+
+    const res = await fetch("/api/genesis", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        description,
+        connection_ids: [...selectedIds],
+        api_key_id: selectedKeyId,
+        model: model.trim(),
+        existing_schema: generatedSchema,
+        refinement: refinement.trim(),
+        existing_program_id: programId,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      const msg =
+        typeof data.error === "string" ? data.error : data.message ?? "Refinement failed. Please try again.";
+      setRefinementError(msg);
+      setIsRefining(false);
+      setStep("result");
+      return;
+    }
+
+    setProgramName(data.program.name);
+    setValidationResult(data.validation);
+    setGeneratedSchema(data.schema);
+    setRefinement("");
+    setWasRefined(true);
+    setIsRefining(false);
+    setStep("result");
+  }
+
+  async function handleImportTemplate(templateId: string) {
+    const template = TEMPLATES.find((t) => t.id === templateId);
+    if (!template) return;
+    setImportingTemplateId(templateId);
+
+    try {
+      const res = await fetch("/api/programs/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ schema: template.schema }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        console.error("[template import] failed:", data);
+        return;
+      }
+      router.push(`/programs/${(data.program as { id: string }).id}`);
+    } catch {
+      // Fall through — user stays on page
+    } finally {
+      setImportingTemplateId(null);
+    }
   }
 
   const errorCount = validationResult?.errors.length ?? 0;
@@ -148,6 +228,46 @@ export default function NewProgramPage() {
             </p>
           </div>
 
+          {/* ── Templates section ── */}
+          <div className="space-y-3">
+            <p className="text-sm font-medium">Start from a template</p>
+            <div className="grid grid-cols-2 gap-3">
+              {TEMPLATES.map((template) => {
+                const isLoading = importingTemplateId === template.id;
+                return (
+                  <button
+                    key={template.id}
+                    disabled={importingTemplateId !== null}
+                    onClick={() => handleImportTemplate(template.id)}
+                    className="text-left rounded-lg border border-border px-4 py-3 hover:bg-accent/60 transition-colors disabled:opacity-50 disabled:cursor-not-allowed space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium leading-tight">{template.name}</p>
+                      {isLoading && <Spinner />}
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-snug line-clamp-2">
+                      {template.description}
+                    </p>
+                    <div className="flex flex-wrap gap-1 pt-0.5">
+                      {template.tags.map((tag) => (
+                        <Badge key={tag} variant="secondary" className="text-[10px] px-1.5 py-0">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="relative flex items-center">
+              <div className="flex-1 border-t border-border" />
+              <span className="px-3 text-xs text-muted-foreground bg-background">or describe your own</span>
+              <div className="flex-1 border-t border-border" />
+            </div>
+          </div>
+
+          {/* ── Description textarea ── */}
           <div className="space-y-2">
             <Textarea
               className="min-h-[160px] text-sm"
@@ -307,12 +427,12 @@ export default function NewProgramPage() {
         </>
       )}
 
-      {/* Generating */}
+      {/* Generating / Refining */}
       {step === "generating" && (
         <div className="py-20 text-center space-y-3">
           <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
             <Spinner />
-            Generating your program…
+            {generatingMessage}
           </div>
           <p className="text-xs text-muted-foreground">
             Claude is designing the graph schema. This usually takes about 1 minute.
@@ -355,7 +475,14 @@ export default function NewProgramPage() {
           ) : (
             <div className="space-y-6">
               <div>
-                <h1 className="text-xl font-semibold">{programName}</h1>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl font-semibold">{programName}</h1>
+                  {wasRefined && (
+                    <Badge variant="secondary" className="text-xs">
+                      Refined ✓
+                    </Badge>
+                  )}
+                </div>
                 <p className="text-sm text-muted-foreground mt-0.5">Program generated successfully.</p>
               </div>
 
@@ -384,6 +511,37 @@ export default function NewProgramPage() {
               {validationResult?.valid && (
                 <div className="rounded-md bg-green-500/10 border border-green-500/20 text-green-700 dark:text-green-400 px-4 py-3 text-sm">
                   Schema is valid and ready.
+                </div>
+              )}
+
+              {/* ── Refinement section ── */}
+              {!!generatedSchema && !!selectedKeyId && !!model && (
+                <div className="rounded-md border border-border p-4 space-y-3">
+                  <p className="text-sm font-medium">Refine this program</p>
+                  <Textarea
+                    className="min-h-[80px] text-sm"
+                    placeholder="e.g. Also send a Slack DM to #alerts when done"
+                    value={refinement}
+                    onChange={(e) => setRefinement(e.target.value)}
+                    disabled={isRefining}
+                  />
+                  {refinementError && (
+                    <p className="text-xs text-destructive">{refinementError}</p>
+                  )}
+                  <Button
+                    size="sm"
+                    disabled={isRefining || refinement.trim().length === 0}
+                    onClick={handleRefine}
+                  >
+                    {isRefining ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Spinner />
+                        Refining…
+                      </span>
+                    ) : (
+                      "Refine →"
+                    )}
+                  </Button>
                 </div>
               )}
 
