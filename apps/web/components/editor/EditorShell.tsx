@@ -42,6 +42,9 @@ import type { ProgramSchema, Node as SchemaNode } from "@flowos/schema";
 import type { ValidationResult } from "@/lib/validation";
 import { createBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import type { PreFlightCheck } from "@/lib/validation/pre-flight";
 
 // ─── Custom node/edge type registrations ─────────────────────────────────────
 
@@ -178,6 +181,7 @@ interface EditorShellProps {
   initialValidation: ValidationResult | null;
   apiKeys: ApiKey[];
   linkedConnections: { id: string; name: string; provider: string; scopes: string[] }[];
+  allConnections: { id: string; name: string; provider: string; scopes: string[] }[];
 }
 
 // ─── EditorShell ──────────────────────────────────────────────────────────────
@@ -187,9 +191,14 @@ export function EditorShell({
   initialSchema,
   initialValidation,
   apiKeys,
-  linkedConnections,
+  linkedConnections: initialLinkedConnections,
+  allConnections,
 }: EditorShellProps) {
   const router = useRouter();
+
+  // ── Linked connections (mutable — auto-grows as user picks new ones) ───────
+
+  const [linkedConnections, setLinkedConnections] = React.useState(initialLinkedConnections);
 
   // ── Reducer ───────────────────────────────────────────────────────────────
 
@@ -289,6 +298,13 @@ export function EditorShell({
     const result = validatePostGenesis(state.schema, linkedConnections);
     dispatch({ type: "SET_VALIDATION", result });
   }, [state.schema, linkedConnections]);
+
+  // Re-validate whenever linkedConnections grows (e.g. after auto-linking)
+  useEffect(() => {
+    const result = validatePostGenesis(state.schema, linkedConnections);
+    dispatch({ type: "SET_VALIDATION", result });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linkedConnections]);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
 
@@ -584,18 +600,40 @@ export function EditorShell({
             ...(connection !== undefined ? { connection: connection as string | null } : {}),
           },
         });
+
+        // Auto-link a newly selected connection to this program
+        if (connection && typeof connection === "string") {
+          const alreadyLinked = linkedConnections.some((c) => c.name === connection);
+          if (!alreadyLinked) {
+            const picked = allConnections.find((c) => c.name === connection);
+            if (picked) {
+              // Optimistic update
+              setLinkedConnections((prev) => [...prev, picked]);
+              // Persist to DB
+              fetch(`/api/programs/${programId}/connections`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ connection_id: picked.id }),
+              }).catch(() => {
+                // Revert on failure
+                setLinkedConnections((prev) => prev.filter((c) => c.id !== picked.id));
+              });
+            }
+          }
+        }
       }
 
       if (Object.keys(configPatch).length > 0) {
         dispatch({ type: "UPDATE_NODE_CONFIG", nodeId, config: configPatch });
       }
     },
-    []
+    [programId, linkedConnections, allConnections]
   );
 
   // ── Run ───────────────────────────────────────────────────────────────────
 
   const [isRunning, setIsRunning] = React.useState(false);
+  const [preFlightChecks, setPreFlightChecks] = React.useState<PreFlightCheck[] | null>(null);
 
   const handleRun = useCallback(async () => {
     if (state.validationResult && !state.validationResult.valid) return;
@@ -610,14 +648,25 @@ export function EditorShell({
         const { run_id } = await res.json();
         router.push(`/programs/${programId}/runs/${run_id}`);
       } else {
-        const { error, checks } = await res.json().catch(() => ({ error: "Failed to start run" }));
-        const msg = checks
-          ? `Pre-flight failed:\n${checks.map((c: { message: string }) => `• ${c.message}`).join("\n")}`
-          : (error ?? "Failed to start run");
-        alert(msg);
+        const body = await res.json().catch(() => null);
+        if (body?.checks) {
+          setPreFlightChecks(body.checks as PreFlightCheck[]);
+        } else {
+          setPreFlightChecks([{
+            code: "PRE_001",
+            label: "Error",
+            status: "fail",
+            failures: [{ node_id: null, message: body?.error ?? "Failed to start run", fix_suggestion: "" }],
+          }]);
+        }
       }
     } catch {
-      alert("Could not reach the server. Check your connection and try again.");
+      setPreFlightChecks([{
+        code: "PRE_001",
+        label: "Connection error",
+        status: "fail",
+        failures: [{ node_id: null, message: "Could not reach the server.", fix_suggestion: "Make sure the runtime service is running." }],
+      }]);
     } finally {
       setIsRunning(false);
     }
@@ -744,7 +793,7 @@ export function EditorShell({
             nodeId={state.selectedNodeId}
             schema={state.schema}
             apiKeys={apiKeys}
-            connections={linkedConnections}
+            connections={allConnections}
             validationResult={state.validationResult}
             onUpdate={handleSidebarUpdate}
             onClose={() => dispatch({ type: "SELECT_NODE", nodeId: null })}
@@ -770,8 +819,78 @@ export function EditorShell({
           />
         )}
       </div>
+
+      {/* Pre-flight failure dialog */}
+      <Dialog open={!!preFlightChecks} onOpenChange={(open) => { if (!open) setPreFlightChecks(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <span>⚠</span> Pre-flight check failed
+            </DialogTitle>
+            <p className="text-sm text-muted-foreground">Fix the following issues before running this program.</p>
+          </DialogHeader>
+
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+            {(preFlightChecks ?? [])
+              .filter((c) => c.status === "fail")
+              .map((check) => (
+                <div key={check.code} className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {check.label}
+                  </p>
+                  {check.failures.map((f, i) => {
+                    const fixLink = preFlightFixLink(check.code, f.fix_suggestion);
+                    return (
+                      <div key={i} className="rounded-md border border-destructive/40 bg-destructive/5 p-3 space-y-2">
+                        <p className="text-sm font-medium text-foreground">{f.message}</p>
+                        {f.fix_suggestion && (
+                          <div className="flex items-start justify-between gap-3">
+                            <p className="text-xs text-muted-foreground">
+                              <span className="font-medium text-primary">How to fix: </span>
+                              {f.fix_suggestion}
+                            </p>
+                            {fixLink && (
+                              <a
+                                href={fixLink.href}
+                                className="shrink-0 text-xs font-medium text-primary underline underline-offset-2 hover:opacity-80 whitespace-nowrap"
+                                onClick={() => setPreFlightChecks(null)}
+                              >
+                                {fixLink.label} →
+                              </a>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreFlightChecks(null)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
+}
+
+// ─── Utility: map a pre-flight check code to an actionable link ──────────────
+
+function preFlightFixLink(
+  code: string,
+  fixSuggestion: string
+): { href: string; label: string } | null {
+  if (code === "PRE_001" || code === "PRE_003" || fixSuggestion.toLowerCase().includes("connection")) {
+    return { href: "/connections", label: "Go to Connections" };
+  }
+  if (code === "PRE_002" || fixSuggestion.toLowerCase().includes("api key")) {
+    return { href: "/api-keys", label: "Go to API Keys" };
+  }
+  return null;
 }
 
 // ─── Utility: detect if a form input is currently focused ────────────────────

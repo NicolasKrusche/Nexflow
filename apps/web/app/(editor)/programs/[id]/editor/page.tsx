@@ -91,6 +91,19 @@ export default async function EditorPage({
     .filter(Boolean)
     .map((c) => ({ id: c.id, name: c.name, provider: c.provider, scopes: c.scopes ?? [] }));
 
+  // ── Fetch all user connections (for sidebar dropdown) ────────────────────
+
+  type ConnectionRow = { id: string; name: string; provider: string; scopes: string[] | null };
+
+  const { data: rawAllConns } = await supabase
+    .from("connections")
+    .select("id, name, provider, scopes")
+    .eq("user_id", user.id)
+    .order("name", { ascending: true });
+
+  const allConnections = ((rawAllConns as unknown as ConnectionRow[]) ?? [])
+    .map((c) => ({ id: c.id, name: c.name, provider: c.provider, scopes: c.scopes ?? [] }));
+
   // ── Run post-genesis validation ───────────────────────────────────────────
 
   const initialValidation = validatePostGenesis(parsedSchema, linkedConnections);
@@ -104,6 +117,7 @@ export default async function EditorPage({
       initialValidation={initialValidation}
       apiKeys={apiKeys}
       linkedConnections={linkedConnections}
+      allConnections={allConnections}
     />
   );
 }

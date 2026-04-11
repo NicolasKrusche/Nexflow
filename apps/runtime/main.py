@@ -15,7 +15,7 @@ from db import get_active_cron_workflows, get_db, release_run_locks, update_run
 from engine.executor import ExecutionError, ProgramExecutor
 from schema import ProgramSchema, parse_schema
 
-load_dotenv()
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"), override=True)
 
 scheduler = AsyncIOScheduler()
 

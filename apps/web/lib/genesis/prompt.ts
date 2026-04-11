@@ -349,15 +349,28 @@ get_attachment
 
 create_database_entry  ← USE THIS for adding rows to a Notion database (e.g. Tasks)
   operation_params:
-    "database_id" : string — REQUIRED, the Notion database UUID
-    "properties"  : object — REQUIRED, Notion property object
-  Example properties for a Tasks database:
+    "database_id" : string — REQUIRED, the Notion database UUID (use "__USER_ASSIGNED__" if unknown)
+    Simple field keys (PREFERRED — works with any database schema automatically):
+      "_title"  → maps to the database's title property
+      "_body"   → maps to the first rich_text property
+      "_status" → maps to the first status property
+      "_select" → maps to the first select property
+      "_date"   → maps to the first date property
+    Values are plain strings (or {{expression}} templates) — no Notion wrapping needed.
+  Example (preferred, works for ANY database):
     {
-      "Name":   { "title": [{ "text": { "content": "{{n3.subject}}" } }] },
-      "Status": { "select": { "name": "To Do" } },
-      "Notes":  { "rich_text": [{ "text": { "content": "{{n4.summary}}" } }] }
+      "database_id": "__USER_ASSIGNED__",
+      "_title": "{{n5.subject}}",
+      "_body": "{{n6.summary}}"
+    }
+  Advanced (explicit Notion API format, only when you know the exact column names):
+    {
+      "database_id": "__USER_ASSIGNED__",
+      "Name": { "title": [{ "text": { "content": "{{n5.subject}}" } }] },
+      "Notes": { "rich_text": [{ "text": { "content": "{{n6.summary}}" } }] }
     }
   ⚠ Do NOT use create_page for database rows. create_page creates standalone pages.
+  ⚠ ALWAYS use the simple _title/_body convention unless the user explicitly names their columns.
 
 create_page  ← USE THIS for sub-pages inside an existing page
   operation_params:
@@ -542,11 +555,9 @@ Examples:
 
   create_database_entry using upstream data:
     operation_params: {
-      "database_id": "abc123",
-      "properties": {
-        "Name": { "title": [{ "text": { "content": "{{n4.subject}}" } }] },
-        "Notes": { "rich_text": [{ "text": { "content": "{{n6.text}}" } }] }
-      }
+      "database_id": "__USER_ASSIGNED__",
+      "_title": "{{n4.subject}}",
+      "_body": "{{n6.text}}"
     }
 
 ════════════════════════════════════════════════════════════
@@ -561,11 +572,23 @@ Nodes:
   n2: connection — search Gmail (operation: "list_emails", query: "is:unread")
   n3: step — filter (condition: "len(data.get('emails', [])) > 0")
   n4: step — loop (over: "data['emails']", item_var: "email")
-  n5: connection — read Gmail email (operation: "read_email", message_id: "{{n4.email.id}}")
-  n6: agent — summarize email (system_prompt: "Summarize the email in input.body in 2 sentences. Return JSON: {\"summary\": \"...\", \"priority\": \"high|medium|low\"}")
-  n7: connection — create Notion task (operation: "create_database_entry")
+  n5: connection — read Gmail email
+        operation: "read_email"
+        operation_params: { "message_id": "{{n4.email.id}}" }   ← REQUIRED, always present
+  n6: agent — summarize email
+        system_prompt: "Summarize the email in input.body in 2 sentences. Return JSON: {\"summary\": \"...\", \"priority\": \"high|medium|low\"}"
+  n7: connection — create Notion task
+        operation: "create_database_entry"
+        operation_params: {
+          "database_id": "__USER_ASSIGNED__",
+          "_title": "{{n5.subject}}",
+          "_body": "{{n6.summary}}"
+        }
+  n8: connection — archive Gmail email
+        operation: "archive_email"
+        operation_params: { "message_id": "{{n5.message_id}}" }   ← use n5.message_id, NOT n4.email.id
 
-Edges: n1→n2, n2→n3, n3→n4, n4→n5, n5→n6, n6→n7 — all "data_flow", all data_mapping: null
+Edges: n1→n2, n2→n3, n3→n4, n4→n5, n5→n6, n6→n7, n7→n8 — all "data_flow", all data_mapping: null
 
 ──────────────────────────────────────────────────────────
 PATTERN B: Webhook trigger → branch on content → different actions
@@ -623,7 +646,22 @@ CRITICAL ANTI-PATTERNS (DO NOT DO THESE)
 
 ✗ WRONG — omitting required operation_params:
     operation: "read_email" with no operation_params (crashes at runtime)
-  CORRECT: always include all REQUIRED params listed in the operation reference
+    operation: "create_database_entry" with no operation_params (crashes at runtime)
+    operation: "archive_email" with no operation_params.message_id (crashes at runtime)
+  CORRECT: always include ALL required params listed in the operation reference above.
+  Every connection node that has an "operation" MUST have "operation_params" with every REQUIRED param filled in.
+
+✗ WRONG — malformed {{expression}} syntax (missing closing braces):
+    "message_id": "{{n4.email.id}"    ← one } missing — expression will NOT resolve
+    "message_id": "{n4.email.id}}"    ← wrong opening — expression will NOT resolve
+  CORRECT: "message_id": "{{n4.email.id}}"   ← exactly two { at start, exactly two } at end
+  Rule: every expression template MUST open with {{ and close with }}. Count your braces.
+
+✗ WRONG — referencing the loop's raw stub instead of the read_email output for archive:
+    archive_email operation_params: { "message_id": "{{n4.email.id}}" }
+      (n4 loop items are Gmail stubs with only {id, threadId} — works but fragile)
+  CORRECT: archive_email operation_params: { "message_id": "{{n5.message_id}}" }
+      where n5 is the read_email node — use the confirmed message_id from the read output
 
 ✗ WRONG — circular edges between regular nodes:
     n3 → n4 → n3 (infinite loop without a branch escape)

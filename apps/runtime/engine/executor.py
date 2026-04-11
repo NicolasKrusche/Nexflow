@@ -59,6 +59,23 @@ def _resolve_path(expr: str, data: Any) -> Any:
     return val
 
 
+_PURE_EXPR = re.compile(r"^\{\{([^}]+)\}\}$")
+
+
+def _resolve_expression_raw(template: str, inputs: dict) -> Any:
+    """Like _resolve_expressions but preserves the native type of the resolved value.
+
+    If the entire template is a single {{expr}}, the raw resolved value is returned
+    (could be dict, list, int, etc.).  If it's a mixed string like "id={{expr}}", the
+    result is always a string (same as _resolve_expressions).
+    """
+    pure = _PURE_EXPR.match(template)
+    if pure:
+        result = _resolve_path(pure.group(1).strip(), inputs)
+        return result  # None, str, int, dict, list — caller decides
+    return _resolve_expressions(template, inputs)
+
+
 def _resolve_expressions(template: str, inputs: dict) -> str:
     """Replace {{key}} and {{node_id.field[0].sub}} expressions with values from inputs.
     Unresolved expressions resolve to empty string — never to the raw template literal.
@@ -716,7 +733,9 @@ class ProgramExecutor:
                 resolved_params: dict[str, Any] = {}
                 for k, v in raw_params.items():
                     if isinstance(v, str):
-                        resolved = _resolve_expressions(v, input_data)
+                        # Use raw resolver so {{expr}} that points to a dict/list keeps
+                        # its native type instead of being JSON-serialised to a string.
+                        resolved = _resolve_expression_raw(v, input_data)
                         # Catch unset __USER_ASSIGNED__ placeholders before they hit an API
                         if resolved == "__USER_ASSIGNED__" or v == "__USER_ASSIGNED__":
                             raise ExecutionError(
@@ -724,9 +743,9 @@ class ProgramExecutor:
                                 f"Parameter '{k}' for operation '{cfg.operation}' has not been configured. "
                                 f"Open the program editor and replace the __USER_ASSIGNED__ placeholder with the actual value.",
                             )
-                        # If expression resolved to empty string and original was a template,
+                        # If expression resolved to None/empty and original was a template,
                         # keep None so connectors can give a clear "missing param" error
-                        if resolved == "" and re.search(r"\{\{", v):
+                        if (resolved is None or resolved == "") and re.search(r"\{\{", v):
                             resolved_params[k] = None
                             print(
                                 f"[executor] WARNING: param '{k}' for {cfg.operation} "
