@@ -16,6 +16,8 @@ FlowOS lets users build AI agent pipelines visually. The canonical JSON schema i
 
 **Run dev:** `pnpm dev` (Turborepo runs all packages)
 
+For recurring troubleshooting and resolved bugs, see `common_issues.md` at the repo root.
+
 ---
 
 ## Tech Stack

@@ -5,6 +5,7 @@ import json
 import os
 import re
 import time
+from urllib.parse import urlsplit
 from typing import Any, Callable
 
 import httpx
@@ -229,6 +230,23 @@ class ProgramExecutor:
                     state[edge.to] = output
                     visited.add(edge.to)
 
+                    # Filter nodes can intentionally halt the branch when the
+                    # condition is false. In that case we don't enqueue
+                    # downstream nodes.
+                    is_filtered_out = (
+                        target_node.type == "step"
+                        and isinstance(target_node.config, StepConfig)
+                        and target_node.config.logic_type == "filter"
+                        and isinstance(output, dict)
+                        and output.get("__filtered_out__") is True
+                    )
+                    if is_filtered_out:
+                        skipped = await self._skip_descendants_from(edge.to)
+                        visited.update(skipped)
+                        for skipped_node_id in skipped:
+                            state[skipped_node_id] = {"__skipped__": True}
+                        continue
+
                     # If this is a loop step, expand it: run all downstream nodes once
                     # per item instead of once with the whole list.
                     if isinstance(output, dict) and "__loop_items__" in output:
@@ -260,6 +278,34 @@ class ProgramExecutor:
                     visited.add(edge.to)  # Mark failed nodes as visited to continue
 
         return state
+
+    async def _skip_descendants_from(self, node_id: str) -> set[str]:
+        """Mark all descendants of a node as skipped for this run.
+
+        Used when a filter node intentionally short-circuits a branch. Without
+        this, untouched descendants stay "pending" in the UI even though the run
+        has completed.
+        """
+        descendants: set[str] = set()
+        frontier = [e.to for e in self.edges_from.get(node_id, [])]
+
+        while frontier:
+            nid = frontier.pop()
+            if nid in descendants:
+                continue
+            descendants.add(nid)
+            frontier.extend(e.to for e in self.edges_from.get(nid, []))
+
+        for nid in descendants:
+            await update_node_execution(
+                self.db,
+                self.run_id,
+                nid,
+                status="skipped",
+                completed_at="now()",
+            )
+
+        return descendants
 
     async def _execute_loop_body(
         self, loop_node_id: str, loop_output: dict, state: dict
@@ -596,7 +642,7 @@ class ProgramExecutor:
             condition = extra.get("condition", "True")
             passes = _safe_eval_condition(condition, input_data)
             if not passes:
-                return {}  # Empty output = filtered out
+                return {"__filtered_out__": True}
             return input_data
 
         elif cfg.logic_type == "branch":
@@ -1057,60 +1103,152 @@ class ProgramExecutor:
 
     async def _fetch_oauth_token(self, connection_id: str, force_refresh: bool = False) -> str:
         """Fetch a valid (auto-refreshed) OAuth access token from Next.js."""
-        nextjs_url = os.environ.get("NEXTJS_INTERNAL_URL", "http://localhost:3000")
         secret = os.environ["RUNTIME_SECRET"]
         params = {"force_refresh": "true"} if force_refresh else {}
+        endpoint_path = f"/api/internal/connections/{connection_id}/token"
+        endpoint_urls = self._nextjs_endpoint_candidates(endpoint_path)
+        attempt_errors: list[str] = []
         async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(
-                f"{nextjs_url}/api/internal/connections/{connection_id}/token",
-                headers={"x-runtime-secret": secret},
-                params=params if params else None,
-            )
-            if not resp.is_success:
+            for idx, endpoint_url in enumerate(endpoint_urls):
+                resp = await client.get(
+                    endpoint_url,
+                    headers={"x-runtime-secret": secret},
+                    params=params if params else None,
+                )
+                if resp.is_success:
+                    try:
+                        data = resp.json()
+                    except Exception as e:
+                        raise ExecutionError(
+                            "OAUTH_TOKEN_FAILED",
+                            f"Token endpoint returned non-JSON response for connection {connection_id} at {endpoint_url}: {resp.text[:200]}",
+                        ) from e
+                    if "access_token" not in data:
+                        raise ExecutionError(
+                            "OAUTH_TOKEN_FAILED",
+                            f"Token endpoint response missing 'access_token' for connection {connection_id} at {endpoint_url}. Got keys: {list(data.keys())}",
+                        )
+                    return str(data["access_token"])
+
+                detail = self._response_error_detail(resp)
+                attempt_errors.append(f"{endpoint_url} -> HTTP {resp.status_code}: {detail}")
+
+                # If NEXTJS_INTERNAL_URL contains a path segment (e.g. /browse),
+                # try an origin-only fallback when the first attempt is a 404.
+                should_try_fallback = (
+                    idx == 0
+                    and len(endpoint_urls) > 1
+                    and resp.status_code in {301, 302, 307, 308, 404}
+                )
+                if should_try_fallback:
+                    continue
+
+                break
+
+            if attempt_errors:
                 try:
-                    body = resp.json()
-                    detail = body.get("error") or body.get("message") or resp.text[:300]
+                    joined = " | ".join(attempt_errors)
                 except Exception:
-                    detail = resp.text[:300]
+                    joined = attempt_errors[-1]
                 raise ExecutionError(
                     "OAUTH_TOKEN_FAILED",
-                    f"Could not retrieve token for connection {connection_id} (HTTP {resp.status_code}): {detail}",
+                    f"Could not retrieve token for connection {connection_id}. Attempts: {joined}",
                 )
-            try:
-                data = resp.json()
-            except Exception as e:
-                raise ExecutionError("OAUTH_TOKEN_FAILED", f"Token endpoint returned non-JSON response for connection {connection_id}: {resp.text[:200]}") from e
-            if "access_token" not in data:
-                raise ExecutionError("OAUTH_TOKEN_FAILED", f"Token endpoint response missing 'access_token' for connection {connection_id}. Got keys: {list(data.keys())}")
-            return str(data["access_token"])
+
+        raise ExecutionError(
+            "OAUTH_TOKEN_FAILED",
+            f"Could not retrieve token for connection {connection_id}: no response",
+        )
 
     async def _fetch_api_key(self, api_key_ref: str) -> tuple[str, str]:
         """Fetch the API key value + provider from the Next.js internal vault endpoint.
         Returns (value, provider).
         """
-        nextjs_url = os.environ.get("NEXTJS_INTERNAL_URL", "http://localhost:3000")
         secret = os.environ["RUNTIME_SECRET"]
+        endpoint_path = f"/api/internal/vault/{api_key_ref}"
+        endpoint_urls = self._nextjs_endpoint_candidates(endpoint_path)
+        attempt_errors: list[str] = []
         async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.get(
-                f"{nextjs_url}/api/internal/vault/{api_key_ref}",
-                headers={"x-runtime-secret": secret},
-            )
-            if not resp.is_success:
+            for idx, endpoint_url in enumerate(endpoint_urls):
+                resp = await client.get(
+                    endpoint_url,
+                    headers={"x-runtime-secret": secret},
+                )
+                if resp.is_success:
+                    try:
+                        data = resp.json()
+                    except Exception as e:
+                        raise ExecutionError(
+                            "API_KEY_FETCH_FAILED",
+                            f"Vault endpoint returned non-JSON for key '{api_key_ref}' at {endpoint_url}: {resp.text[:200]}",
+                        ) from e
+                    if "value" not in data:
+                        raise ExecutionError(
+                            "API_KEY_FETCH_FAILED",
+                            f"Vault response missing 'value' for key '{api_key_ref}' at {endpoint_url}. Got keys: {list(data.keys())}",
+                        )
+                    return str(data["value"]), str(data.get("provider", ""))
+
+                detail = self._response_error_detail(resp)
+                attempt_errors.append(f"{endpoint_url} -> HTTP {resp.status_code}: {detail}")
+
+                should_try_fallback = (
+                    idx == 0
+                    and len(endpoint_urls) > 1
+                    and resp.status_code in {301, 302, 307, 308, 404}
+                )
+                if should_try_fallback:
+                    continue
+                break
+
+            if attempt_errors:
                 try:
-                    detail = resp.json().get("error", resp.text[:300])
+                    joined = " | ".join(attempt_errors)
                 except Exception:
-                    detail = resp.text[:300]
+                    joined = attempt_errors[-1]
                 raise ExecutionError(
                     "API_KEY_FETCH_FAILED",
-                    f"Could not fetch API key '{api_key_ref}' (HTTP {resp.status_code}): {detail}",
+                    f"Could not fetch API key '{api_key_ref}'. Attempts: {joined}",
                 )
-            try:
-                data = resp.json()
-            except Exception as e:
-                raise ExecutionError("API_KEY_FETCH_FAILED", f"Vault endpoint returned non-JSON for key '{api_key_ref}': {resp.text[:200]}") from e
-            if "value" not in data:
-                raise ExecutionError("API_KEY_FETCH_FAILED", f"Vault response missing 'value' for key '{api_key_ref}'. Got keys: {list(data.keys())}")
-            return str(data["value"]), str(data.get("provider", ""))
+
+        raise ExecutionError(
+            "API_KEY_FETCH_FAILED",
+            f"Could not fetch API key '{api_key_ref}': no response",
+        )
+
+    def _nextjs_endpoint_candidates(self, endpoint_path: str) -> list[str]:
+        """Build internal endpoint URLs with an origin-only fallback.
+
+        If NEXTJS_INTERNAL_URL is set to a path (for example
+        https://app.example.com/browse), internal API calls should still target
+        https://app.example.com/api/... .
+        """
+        raw_base = os.environ.get("NEXTJS_INTERNAL_URL", "http://localhost:3000").strip()
+        if not raw_base:
+            raw_base = "http://localhost:3000"
+        if "://" not in raw_base:
+            raw_base = f"http://{raw_base}"
+
+        normalized = raw_base.rstrip("/")
+        urls = [f"{normalized}{endpoint_path}"]
+
+        parsed = urlsplit(normalized)
+        if parsed.path and parsed.path != "/":
+            origin_only = f"{parsed.scheme}://{parsed.netloc}{endpoint_path}"
+            if origin_only not in urls:
+                urls.append(origin_only)
+
+        return urls
+
+    @staticmethod
+    def _response_error_detail(resp: httpx.Response) -> str:
+        try:
+            body = resp.json()
+            if isinstance(body, dict):
+                return str(body.get("error") or body.get("message") or resp.text[:300])
+            return str(body)[:300]
+        except Exception:
+            return resp.text[:300]
 
     async def _with_retry(
         self,
