@@ -22,6 +22,7 @@ class NotionConnector(IConnector):
         "append_to_page",
         "query_database",
         "create_database_entry",
+        "create_database",
     ]
 
     async def execute(
@@ -47,6 +48,8 @@ class NotionConnector(IConnector):
                     return await self._query_database(client, headers, params)
                 case "create_database_entry":
                     return await self._create_database_entry(client, headers, params)
+                case "create_database":
+                    return await self._create_database(client, headers, params)
                 case _:
                     raise ConnectorError(
                         "UNSUPPORTED_OPERATION",
@@ -144,6 +147,49 @@ class NotionConnector(IConnector):
         data = r.json()
         return {"results": data.get("results", []), "has_more": data.get("has_more", False)}
 
+    async def _create_database(
+        self, client: httpx.AsyncClient, headers: dict, params: dict
+    ) -> dict:
+        """Create a new Notion database as a child of a given page.
+
+        Required params:
+          - parent_page_id: ID or URL of the parent page
+        Optional params:
+          - title: Database title (default: "Untitled Database")
+          - properties: dict of additional Notion property definitions to include
+        """
+        raw_parent = params.get("parent_page_id")
+        if not raw_parent:
+            raise ConnectorError("MISSING_PARAM", "create_database requires 'parent_page_id'")
+        parent_id = _extract_database_id(str(raw_parent))
+        title = params.get("title", "Untitled Database")
+        extra_properties: dict[str, Any] = params.get("properties", {})
+
+        # Every Notion DB must have at least a Name (title) property
+        properties: dict[str, Any] = {
+            "Name": {"title": {}},
+            **extra_properties,
+        }
+
+        body: dict[str, Any] = {
+            "parent": {"type": "page_id", "page_id": parent_id},
+            "title": [{"type": "text", "text": {"content": str(title)[:_NOTION_TEXT_LIMIT]}}],
+            "properties": properties,
+        }
+        r = await request_with_rate_limit(
+            client, "POST", f"{_BASE}/databases", headers=headers, json=body
+        )
+        _raise_for_status(r, "create_database")
+        try:
+            result = r.json()
+        except Exception as e:
+            raise ConnectorError("NOTION_PARSE_ERROR", f"create_database returned non-JSON response: {r.text[:200]}") from e
+        return {
+            "database_id": result.get("id"),
+            "url": result.get("url"),
+            "title": title,
+        }
+
     async def _fetch_database_schema(
         self, client: httpx.AsyncClient, headers: dict, database_id: str
     ) -> dict[str, Any]:
@@ -157,20 +203,82 @@ class NotionConnector(IConnector):
         except Exception:
             return {}
 
+    async def _find_or_create_database(
+        self, client: httpx.AsyncClient, headers: dict, name: str
+    ) -> str:
+        """Find a Notion database by name or create it automatically.
+
+        1. Search for a database matching `name` (exact title match preferred).
+        2. If not found, find the first accessible page and create the database there.
+        Returns the database UUID.
+        """
+        # Step 1: Search for existing database
+        r = await request_with_rate_limit(
+            client,
+            "POST",
+            f"{_BASE}/search",
+            headers=headers,
+            json={"query": name, "filter": {"value": "database", "property": "object"}},
+        )
+        _raise_for_status(r, "search_database")
+        results = r.json().get("results", [])
+        name_lower = name.lower().strip()
+        for db in results:
+            titles = db.get("title", [])
+            db_title = "".join(t.get("plain_text", "") for t in titles).lower().strip()
+            if db_title == name_lower:
+                print(f"[notion] found existing database '{name}' -> {db['id']}", flush=True)
+                return db["id"]
+
+        # Step 2: Not found — find first accessible page to use as parent
+        print(f"[notion] database '{name}' not found, creating it automatically", flush=True)
+        r2 = await request_with_rate_limit(
+            client,
+            "POST",
+            f"{_BASE}/search",
+            headers=headers,
+            json={"filter": {"value": "page", "property": "object"}, "page_size": 1},
+        )
+        _raise_for_status(r2, "search_parent_page")
+        pages = r2.json().get("results", [])
+        if not pages:
+            raise ConnectorError(
+                "NO_ACCESSIBLE_PAGE",
+                f"Cannot create database '{name}': no Notion pages are shared with the Nexflow integration. "
+                "Share at least one page with the integration so it can create the database automatically.",
+            )
+        parent_id = pages[0]["id"]
+        print(f"[notion] creating database '{name}' under page {parent_id}", flush=True)
+
+        # Step 3: Create the database
+        body: dict[str, Any] = {
+            "parent": {"type": "page_id", "page_id": parent_id},
+            "title": [{"type": "text", "text": {"content": name[:_NOTION_TEXT_LIMIT]}}],
+            "properties": {"Name": {"title": {}}},
+        }
+        r3 = await request_with_rate_limit(
+            client, "POST", f"{_BASE}/databases", headers=headers, json=body
+        )
+        _raise_for_status(r3, "create_database")
+        db_id = r3.json().get("id")
+        print(f"[notion] created database '{name}' -> {db_id}", flush=True)
+        return db_id
+
     async def _create_database_entry(
         self, client: httpx.AsyncClient, headers: dict, params: dict
     ) -> dict:
         raw_id = params.get("database_id")
         if not raw_id:
             raise ConnectorError("MISSING_PARAM", "create_database_entry requires 'database_id'")
-        if raw_id == "__USER_ASSIGNED__":
-            raise ConnectorError(
-                "UNSET_PARAM",
-                "create_database_entry: 'database_id' has not been set. "
-                "Open the program in the editor and replace __USER_ASSIGNED__ with your Notion database ID or URL. "
-                "You can find the database ID in the Notion URL: notion.so/<workspace>/<database_id>?v=...",
-            )
-        database_id = _extract_database_id(str(raw_id))
+        # If unset sentinel, fall back to a sensible default name
+        raw_str = str(raw_id).strip()
+        if raw_str == "__USER_ASSIGNED__" or not raw_str:
+            raw_str = "Nexflow Tasks"
+        # If it looks like a name (not a UUID or URL), find or create automatically
+        if raw_str.startswith("http") or _UUID_RE.fullmatch(raw_str) or _HEX32_RE.fullmatch(raw_str):
+            database_id = _extract_database_id(raw_str)
+        else:
+            database_id = await self._find_or_create_database(client, headers, raw_str)
 
         # Support two calling conventions:
         # 1. Flat top-level _title/_body/... keys (new genesis convention)

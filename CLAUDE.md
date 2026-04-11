@@ -106,6 +106,18 @@ Live run visualization via Supabase Realtime on `node_executions` — no polling
 
 ---
 
+## Genesis Prompt Sync Rule
+
+Whenever you add or modify a connector operation (in `apps/runtime/connectors/`), always check `apps/web/lib/genesis/prompt.ts` and update it if needed so Genesis knows about the new operation. This applies to:
+
+- New operations added to `supported_operations`
+- Changed parameter names or semantics
+- New output fields that downstream nodes might reference
+
+If the operation is user-facing (Genesis could plausibly generate it), document it in the prompt. If it's purely internal, note why it was omitted.
+
+---
+
 ## Coding Standards
 
 - TypeScript strict mode everywhere — **no `any`**

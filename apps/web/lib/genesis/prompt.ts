@@ -333,9 +333,11 @@ archive_email
 
 label_email
   operation_params:
-    "message_id"     : string — REQUIRED
-    "add_label_ids"  : array of Gmail label ID strings (optional)
-    "remove_label_ids": array of Gmail label ID strings (optional)
+    "message_id"      : string — REQUIRED
+    "add_label_ids"   : array of label names OR Gmail label IDs (optional) — names are resolved and created automatically
+    "remove_label_ids": array of label names OR Gmail label IDs (optional)
+  Example: { "message_id": "{{n2.message_id}}", "add_label_ids": ["Logged to Notion"] }
+  ⚠ ALWAYS use plain human-readable names like "Logged to Notion" — never use raw Gmail label IDs.
 
 list_threads
   operation_params: { "query": string, "max_results": number }
@@ -349,7 +351,10 @@ get_attachment
 
 create_database_entry  ← USE THIS for adding rows to a Notion database (e.g. Tasks)
   operation_params:
-    "database_id" : string — REQUIRED, the Notion database UUID (use "__USER_ASSIGNED__" if unknown)
+    "database_id" : string — REQUIRED. Accepts a UUID, URL, OR a plain name like "Tasks".
+                    If a name is given, the connector finds the database automatically.
+                    If it does not exist yet, it is created automatically under the first accessible Notion page.
+                    ALWAYS use a plain name (e.g. "Email Tasks") — never use "__USER_ASSIGNED__".
     Simple field keys (PREFERRED — works with any database schema automatically):
       "_title"  → maps to the database's title property
       "_body"   → maps to the first rich_text property
@@ -371,6 +376,15 @@ create_database_entry  ← USE THIS for adding rows to a Notion database (e.g. T
     }
   ⚠ Do NOT use create_page for database rows. create_page creates standalone pages.
   ⚠ ALWAYS use the simple _title/_body convention unless the user explicitly names their columns.
+
+create_database  ← USE THIS to create a new Notion database inside an existing page
+  operation_params:
+    "parent_page_id" : string — REQUIRED, UUID or URL of the parent page
+    "title"          : string (optional, default "Untitled Database")
+    "properties"     : object (optional, additional Notion property definitions)
+  output: { database_id, url, title }
+  ⚠ Use this only when the user explicitly wants to CREATE a new database, not write to an existing one.
+  ⚠ The parent page must be shared with the Nexflow integration.
 
 create_page  ← USE THIS for sub-pages inside an existing page
   operation_params:

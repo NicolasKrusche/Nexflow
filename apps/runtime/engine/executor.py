@@ -736,13 +736,7 @@ class ProgramExecutor:
                         # Use raw resolver so {{expr}} that points to a dict/list keeps
                         # its native type instead of being JSON-serialised to a string.
                         resolved = _resolve_expression_raw(v, input_data)
-                        # Catch unset __USER_ASSIGNED__ placeholders before they hit an API
-                        if resolved == "__USER_ASSIGNED__" or v == "__USER_ASSIGNED__":
-                            raise ExecutionError(
-                                "UNSET_PARAM",
-                                f"Parameter '{k}' for operation '{cfg.operation}' has not been configured. "
-                                f"Open the program editor and replace the __USER_ASSIGNED__ placeholder with the actual value.",
-                            )
+                        # Pass __USER_ASSIGNED__ through to connectors — they handle fallbacks gracefully
                         # If expression resolved to None/empty and original was a template,
                         # keep None so connectors can give a clear "missing param" error
                         if (resolved is None or resolved == "") and re.search(r"\{\{", v):

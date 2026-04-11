@@ -296,21 +296,62 @@ class GmailConnector(IConnector):
         _raise_for_status(r, "archive_email")
         return {"message_id": message_id, "archived": True}
 
+    async def _resolve_label_names(
+        self, client: httpx.AsyncClient, headers: dict, names: list[str]
+    ) -> list[str]:
+        """Resolve label names to Gmail label IDs, creating missing labels automatically."""
+        if not names:
+            return []
+        # Fetch all existing labels once
+        r = await request_with_rate_limit(client, "GET", f"{_BASE}/labels", headers=headers)
+        _raise_for_status(r, "list_labels")
+        existing = {lbl["name"].lower(): lbl["id"] for lbl in r.json().get("labels", [])}
+        ids = []
+        for name in names:
+            label_id = existing.get(name.lower())
+            if not label_id:
+                # Create the label automatically
+                print(f"[gmail] creating label '{name}'", flush=True)
+                cr = await request_with_rate_limit(
+                    client, "POST", f"{_BASE}/labels", headers=headers,
+                    json={"name": name, "labelListVisibility": "labelShow", "messageListVisibility": "show"},
+                )
+                _raise_for_status(cr, "create_label")
+                label_id = cr.json()["id"]
+                print(f"[gmail] created label '{name}' -> {label_id}", flush=True)
+            ids.append(label_id)
+        return ids
+
     async def _label_email(
         self, client: httpx.AsyncClient, headers: dict, params: dict
     ) -> dict:
         message_id = params.get("message_id")
         if not message_id:
             raise ConnectorError("MISSING_PARAM", "label_email requires 'message_id'")
+
+        # Accept label names (strings) or raw IDs — resolve names automatically
+        add_raw = params.get("add_label_ids") or params.get("add_label_names") or []
+        remove_raw = params.get("remove_label_ids") or params.get("remove_label_names") or []
+        if isinstance(add_raw, str):
+            add_raw = [add_raw]
+        if isinstance(remove_raw, str):
+            remove_raw = [remove_raw]
+
+        # Names contain spaces or aren't all-caps system IDs → resolve to IDs
+        def _needs_resolve(labels: list) -> bool:
+            return any(not str(l).isupper() or " " in str(l) for l in labels)
+
+        add_ids = await self._resolve_label_names(client, headers, [str(l) for l in add_raw]) \
+            if _needs_resolve(add_raw) else [str(l) for l in add_raw]
+        remove_ids = await self._resolve_label_names(client, headers, [str(l) for l in remove_raw]) \
+            if _needs_resolve(remove_raw) else [str(l) for l in remove_raw]
+
         r = await request_with_rate_limit(
             client,
             "POST",
             f"{_BASE}/messages/{message_id}/modify",
             headers=headers,
-            json={
-                "addLabelIds": list(params.get("add_label_ids") or []),
-                "removeLabelIds": list(params.get("remove_label_ids") or []),
-            },
+            json={"addLabelIds": add_ids, "removeLabelIds": remove_ids},
         )
         _raise_for_status(r, "label_email")
         return {"message_id": message_id, "labels": r.json().get("labelIds", [])}
