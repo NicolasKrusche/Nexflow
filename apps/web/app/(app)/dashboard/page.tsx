@@ -5,8 +5,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DeleteProgramButton } from "@/components/programs/delete-program-button";
-
-// ─── Types ─────────────────────────────────────────────────────────────────────
+import { GenesisPrompt } from "@/components/dashboard/genesis-prompt";
 
 type Program = {
   id: string;
@@ -29,8 +28,6 @@ type RecentRun = {
   created_at: string;
   programs: { name: string } | null;
 };
-
-// ─── Helpers ───────────────────────────────────────────────────────────────────
 
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -58,42 +55,6 @@ const STATUS_COLORS: Record<string, string> = {
   waiting_approval: "bg-blue-400",
   pending: "bg-muted-foreground",
 };
-
-// ─── Stat card ─────────────────────────────────────────────────────────────────
-
-function StatCard({
-  label,
-  value,
-  icon,
-  href,
-  accent = false,
-}: {
-  label: string;
-  value: number | string;
-  icon: React.ReactNode;
-  href?: string;
-  accent?: boolean;
-}) {
-  const inner = (
-    <div className={`group rounded-xl border p-5 flex items-start justify-between gap-4 transition-all duration-200 ${
-      accent
-        ? "border-primary/20 bg-card hover:border-primary/40 shadow-[0_0_24px_rgba(249,115,22,0.06)]"
-        : "border-border bg-card hover:border-border/60"
-    }`}>
-      <div>
-        <p className="text-xs text-muted-foreground mb-1.5">{label}</p>
-        <p className="text-2xl font-bold tracking-tight tabular-nums">{value}</p>
-      </div>
-      <div className={`p-2 rounded-lg shrink-0 ${accent ? "bg-primary/10 text-primary" : "bg-accent text-muted-foreground"}`}>
-        {icon}
-      </div>
-    </div>
-  );
-  if (href) return <Link href={href}>{inner}</Link>;
-  return inner;
-}
-
-// ─── Page ──────────────────────────────────────────────────────────────────────
 
 export default async function DashboardPage() {
   const supabase = await createServerClient();
@@ -125,28 +86,41 @@ export default async function DashboardPage() {
       .select("id, program_id, status, triggered_by, started_at, completed_at, created_at, programs(name)")
       .in("program_id", programIds)
       .order("created_at", { ascending: false })
-      .limit(5);
+      .limit(8);
     recentRuns = (data ?? []) as unknown as RecentRun[];
   }
 
   const activePrograms = programs.filter((p) => p.is_active).length;
-  const totalRuns = recentRuns.length;
   const displayName = user.email?.split("@")[0] ?? "there";
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-7">
 
       {/* ── Header ── */}
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <div className="w-0.5 h-10 rounded-full bg-gradient-to-b from-primary to-primary/0 mt-0.5 shrink-0" />
-          <div>
-            <h1 className="text-xl font-bold tracking-tight">
-              Good {getGreeting()}, <span className="text-primary">{displayName}</span>
-            </h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Here&apos;s an overview of your automation workspace.
-            </p>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-black tracking-tight">
+            Good {getGreeting()},{" "}
+            <span
+              className="text-primary"
+              style={{ textShadow: "0 0 32px rgba(249,115,22,0.5), 0 0 64px rgba(249,115,22,0.2)" }}
+            >
+              {displayName}
+            </span>
+          </h1>
+          {/* Inline stat pills */}
+          <div className="flex items-center gap-3 mt-2">
+            <span className="text-xs text-muted-foreground">
+              <span className="font-semibold text-foreground tabular-nums">{programs.length}</span> programs
+            </span>
+            <span className="w-px h-3 bg-border" />
+            <span className="text-xs text-muted-foreground">
+              <span className="font-semibold text-green-500 tabular-nums">{activePrograms}</span> active
+            </span>
+            <span className="w-px h-3 bg-border" />
+            <span className="text-xs text-muted-foreground">
+              <span className="font-semibold text-foreground tabular-nums">{connectionCount}</span> connections
+            </span>
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -159,97 +133,57 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Stats row ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard
-          label="Total programs"
-          value={programs.length}
-          href="/dashboard"
-          accent={programs.length > 0}
-          icon={
-            <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-              <path d="M3 4a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4ZM3 10a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6Zm11-1a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2a1 1 0 0 0 1-1v-6a1 1 0 0 0-1-1h-2Z" />
-            </svg>
-          }
-        />
-        <StatCard
-          label="Active"
-          value={activePrograms}
-          icon={
-            <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-              <path fillRule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clipRule="evenodd" />
-            </svg>
-          }
-        />
-        <StatCard
-          label="Connections"
-          value={connectionCount}
-          href="/connections"
-          icon={
-            <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-              <path d="M3.172 5.172a4 4 0 0 1 5.656 0L10 6.343l1.172-1.171a4 4 0 1 1 5.656 5.656L10 19l-6.828-6.172a4 4 0 0 1 0-5.656Z" />
-            </svg>
-          }
-        />
-        <StatCard
-          label="Recent runs"
-          value={totalRuns > 0 ? `${totalRuns}` : "0"}
-          href="/runs"
-          icon={
-            <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-              <path fillRule="evenodd" d="M2 10a8 8 0 1 1 16 0 8 8 0 0 1-16 0Zm6.39-2.908a.75.75 0 0 1 .766.027l3.5 2.25a.75.75 0 0 1 0 1.262l-3.5 2.25A.75.75 0 0 1 8 12.25v-4.5a.75.75 0 0 1 .39-.658Z" clipRule="evenodd" />
-            </svg>
-          }
-        />
-      </div>
+      {/* ── Genesis prompt ── */}
+      <GenesisPrompt />
 
-      {/* ── Main content ── */}
+      {/* ── Main grid ── */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
 
-        {/* Programs list — 3/5 */}
+        {/* Programs — 3/5 */}
         <div className="lg:col-span-3 space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Programs</h2>
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-widest text-[11px]">Programs</h2>
             {programs.length > 0 && (
               <Link href="/programs/new" className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
-                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3"><path d="M8.75 3.75a.75.75 0 0 0-1.5 0v3.5h-3.5a.75.75 0 0 0 0 1.5h3.5v3.5a.75.75 0 0 0 1.5 0v-3.5h3.5a.75.75 0 0 0 0-1.5h-3.5v-3.5Z" /></svg>
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3">
+                  <path d="M8.75 3.75a.75.75 0 0 0-1.5 0v3.5h-3.5a.75.75 0 0 0 0 1.5h3.5v3.5a.75.75 0 0 0 1.5 0v-3.5h3.5a.75.75 0 0 0 0-1.5h-3.5v-3.5Z" />
+                </svg>
                 New
               </Link>
             )}
           </div>
 
           {programs.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border p-10 text-center">
-              <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-primary/10 text-primary mb-3">
-                <svg viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
-                  <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
-                </svg>
+            <div className="relative rounded-xl border border-dashed border-border overflow-hidden p-12 text-center">
+              <div className="absolute inset-0 bg-grid-dots opacity-20" />
+              <div className="relative">
+                <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl border border-border bg-card text-primary mb-4">
+                  <svg viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                    <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
+                  </svg>
+                </div>
+                <p className="text-sm font-semibold mb-1">No programs yet</p>
+                <p className="text-xs text-muted-foreground mb-5 max-w-xs mx-auto">Describe an automation in plain English and Nexflow designs the agent graph.</p>
+                <Button asChild size="sm">
+                  <Link href="/programs/new">Create first program</Link>
+                </Button>
               </div>
-              <p className="text-sm font-medium mb-1">No programs yet</p>
-              <p className="text-xs text-muted-foreground mb-4">Describe an automation and Nexflow will design the agent graph for you.</p>
-              <Button asChild size="sm" variant="outline">
-                <Link href="/programs/new">Create first program</Link>
-              </Button>
             </div>
           ) : (
             <div className="rounded-xl border border-border overflow-hidden divide-y divide-border">
               {programs.map((p) => (
-                <div key={p.id} className="group flex items-center gap-4 px-4 py-3.5 hover:bg-accent/50 transition-colors">
-                  {/* Status indicator */}
-                  <div className={`w-1 h-8 rounded-full shrink-0 ${p.is_active ? "bg-green-500/70" : "bg-border"}`} />
+                <div key={p.id} className="group flex items-center gap-3 px-4 py-3.5 hover:bg-accent/40 transition-colors">
+                  <div className={`w-0.5 h-7 rounded-full shrink-0 transition-colors ${p.is_active ? "bg-green-500/60 group-hover:bg-green-500" : "bg-border"}`} />
                   <Link href={`/programs/${p.id}`} className="min-w-0 flex-1">
                     <p className="text-sm font-medium truncate">{p.name}</p>
-                    {p.description && (
-                      <p className="text-xs text-muted-foreground mt-0.5 truncate">{p.description}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground/70 mt-1 font-mono">
-                      v{p.schema_version} · {new Date(p.updated_at).toLocaleDateString()}
-                      {p.last_run_at && <> · ran {timeAgo(p.last_run_at)}</>}
+                    <p className="text-[11px] text-muted-foreground/60 mt-0.5 font-mono truncate">
+                      v{p.schema_version} · {p.execution_mode}
+                      {p.last_run_at && <> · {timeAgo(p.last_run_at)}</>}
                     </p>
                   </Link>
                   <div className="flex items-center gap-2 shrink-0">
-                    <Badge variant="outline" className="capitalize text-xs font-mono">
-                      {p.execution_mode}
+                    <Badge variant={p.is_active ? "success" : "outline"} className="text-[10px] capitalize">
+                      {p.is_active ? "Active" : "Inactive"}
                     </Badge>
                     <DeleteProgramButton programId={p.id} programName={p.name} />
                   </div>
@@ -259,71 +193,36 @@ export default async function DashboardPage() {
           )}
         </div>
 
-        {/* Right column — 2/5 */}
-        <div className="lg:col-span-2 space-y-5">
-
-          {/* Recent runs */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold">Recent runs</h2>
-              <Link href="/runs" className="text-xs text-muted-foreground hover:text-foreground transition-colors">View all</Link>
+        {/* Recent runs — 2/5 */}
+        <div className="lg:col-span-2">
+          <h2 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-3">Recent runs</h2>
+          {recentRuns.length === 0 ? (
+            <div className="rounded-xl border border-border p-8 text-center">
+              <p className="text-xs text-muted-foreground">No runs yet.</p>
+              <p className="text-xs text-muted-foreground/60 mt-1">Open a program and click Run.</p>
             </div>
-
-            {recentRuns.length === 0 ? (
-              <div className="rounded-xl border border-border p-6 text-center">
-                <p className="text-xs text-muted-foreground">No runs yet. Open a program and click Run.</p>
-              </div>
-            ) : (
-              <div className="rounded-xl border border-border divide-y divide-border overflow-hidden">
-                {recentRuns.map((run) => (
-                  <Link
-                    key={run.id}
-                    href={`/programs/${run.program_id}/runs/${run.id}`}
-                    className="flex items-center gap-3 px-4 py-3 hover:bg-accent/50 transition-colors"
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_COLORS[run.status] ?? "bg-muted-foreground"}`} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium truncate">{run.programs?.name ?? "Unknown"}</p>
-                      <p className="text-[11px] text-muted-foreground capitalize font-mono">
-                        {run.status.replace(/_/g, " ")} · {timeAgo(run.created_at)}
-                      </p>
-                    </div>
-                    <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-muted-foreground/50 shrink-0">
-                      <path fillRule="evenodd" d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
-                    </svg>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Quick actions */}
-          <div>
-            <h2 className="text-sm font-semibold mb-3">Quick actions</h2>
+          ) : (
             <div className="rounded-xl border border-border divide-y divide-border overflow-hidden">
-              {[
-                { label: "New program", description: "Describe an automation", href: "/programs/new", accent: true },
-                { label: "Import program", description: "Upload or paste a JSON schema", href: "/programs/import", accent: false },
-                { label: "Add connection", description: "Connect Gmail, Slack & more", href: "/connections", accent: false },
-                { label: "API keys", description: "Manage your model API keys", href: "/api-keys", accent: false },
-              ].map(({ label, description, href, accent }) => (
+              {recentRuns.map((run) => (
                 <Link
-                  key={href}
-                  href={href}
-                  className="flex items-center gap-3 px-4 py-3 hover:bg-accent/50 transition-colors"
+                  key={run.id}
+                  href={`/programs/${run.program_id}/runs/${run.id}`}
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-accent/40 transition-colors"
                 >
-                  <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${accent ? "bg-primary" : "bg-border"}`} />
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_COLORS[run.status] ?? "bg-muted-foreground"}`} />
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-medium">{label}</p>
-                    <p className="text-[11px] text-muted-foreground">{description}</p>
+                    <p className="text-xs font-medium truncate">{run.programs?.name ?? "Unknown"}</p>
+                    <p className="text-[11px] text-muted-foreground/60 font-mono capitalize">
+                      {run.status.replace(/_/g, " ")} · {timeAgo(run.created_at)}
+                    </p>
                   </div>
-                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-muted-foreground/40 shrink-0">
+                  <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-muted-foreground/30 shrink-0">
                     <path fillRule="evenodd" d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
                   </svg>
                 </Link>
               ))}
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

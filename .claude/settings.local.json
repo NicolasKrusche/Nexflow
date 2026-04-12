@@ -216,7 +216,8 @@
       "Bash(node -e \"const p=require\\('./apps/web/package.json'\\); console.log\\(JSON.stringify\\({deps: p.dependencies, devDeps: p.devDependencies}, null, 2\\)\\)\")",
       "Bash(New-Item -Path \"H:\\\\Archon\\\\ARCHON_1\\\\apps\\\\web\\\\app\\\\auth\\\\callback\\\\route.ts\" -ItemType File -Force)",
       "Bash(Out-Null)",
-      "Bash(New-Item -Path \"H:\\\\Archon\\\\ARCHON_1\\\\apps\\\\web\\\\app\\\\\\(auth\\)\\\\update-password\\\\page.tsx\" -ItemType File -Force)"
+      "Bash(New-Item -Path \"H:\\\\Archon\\\\ARCHON_1\\\\apps\\\\web\\\\app\\\\\\(auth\\)\\\\update-password\\\\page.tsx\" -ItemType File -Force)",
+      "mcp__Claude_Preview__preview_start"
     ]
   }
 }

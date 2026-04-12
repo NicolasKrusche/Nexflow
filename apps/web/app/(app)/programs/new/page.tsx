@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -43,11 +44,12 @@ const PROVIDER_LABELS: Record<string, string> = {
   sheets: "Google Sheets",
 };
 
-export default function NewProgramPage() {
+function NewProgramPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [step, setStep] = useState<Step>("describe");
   const [generatingMessage, setGeneratingMessage] = useState("Generating your program…");
-  const [description, setDescription] = useState("");
+  const [description, setDescription] = useState(searchParams.get("prompt") ?? "");
   const [connections, setConnections] = useState<Connection[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loadingConnections, setLoadingConnections] = useState(true);
@@ -568,4 +570,8 @@ function Spinner() {
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
     </svg>
   );
+}
+
+export default function NewProgramPage() {
+  return <Suspense><NewProgramPageInner /></Suspense>;
 }
