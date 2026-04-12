@@ -432,6 +432,108 @@ const OPERATION_PARAM_FIELDS: Record<string, Record<string, ParamField[]>> = {
   },
 };
 
+// ─── Required scopes per provider+operation ───────────────────────────────────
+
+const OPERATION_SCOPES: Record<string, Record<string, string[]>> = {
+  gmail: {
+    list_emails:    ["https://www.googleapis.com/auth/gmail.readonly"],
+    list_threads:   ["https://www.googleapis.com/auth/gmail.readonly"],
+    search:         ["https://www.googleapis.com/auth/gmail.readonly"],
+    read_email:     ["https://www.googleapis.com/auth/gmail.readonly"],
+    get_attachment: ["https://www.googleapis.com/auth/gmail.readonly"],
+    send_email:     ["https://www.googleapis.com/auth/gmail.send"],
+    archive_email:  ["https://www.googleapis.com/auth/gmail.modify"],
+    label_email:    ["https://www.googleapis.com/auth/gmail.modify"],
+  },
+  notion: {
+    read_page:             [],
+    query_database:        [],
+    create_page:           [],
+    append_to_page:        [],
+    create_database_entry: [],
+    create_database:       [],
+  },
+  slack: {
+    send_message:   ["chat:write"],
+    read_channel:   ["channels:history", "groups:history"],
+    list_channels:  ["channels:read"],
+    create_channel: ["channels:manage"],
+  },
+  github: {
+    create_issue:     ["repo"],
+    comment_on_issue: ["repo"],
+    list_prs:         ["repo"],
+    get_pr_diff:      ["repo"],
+    push_file:        ["repo"],
+  },
+  sheets: {
+    read_range:  ["https://www.googleapis.com/auth/spreadsheets.readonly"],
+    list_sheets: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
+    write_range: ["https://www.googleapis.com/auth/spreadsheets"],
+    append_row:  ["https://www.googleapis.com/auth/spreadsheets"],
+    create_sheet:["https://www.googleapis.com/auth/spreadsheets"],
+    clear_range: ["https://www.googleapis.com/auth/spreadsheets"],
+  },
+  calendar: {
+    list_events:  ["https://www.googleapis.com/auth/calendar.readonly"],
+    get_event:    ["https://www.googleapis.com/auth/calendar.readonly"],
+    create_event: ["https://www.googleapis.com/auth/calendar"],
+    update_event: ["https://www.googleapis.com/auth/calendar"],
+    delete_event: ["https://www.googleapis.com/auth/calendar"],
+  },
+  docs: {
+    read_document:      ["https://www.googleapis.com/auth/documents.readonly"],
+    create_document:    ["https://www.googleapis.com/auth/documents"],
+    append_to_document: ["https://www.googleapis.com/auth/documents"],
+    replace_text:       ["https://www.googleapis.com/auth/documents"],
+  },
+  drive: {
+    list_files:        ["https://www.googleapis.com/auth/drive.readonly"],
+    get_file_metadata: ["https://www.googleapis.com/auth/drive.readonly"],
+    create_folder:     ["https://www.googleapis.com/auth/drive"],
+    share_file:        ["https://www.googleapis.com/auth/drive"],
+    delete_file:       ["https://www.googleapis.com/auth/drive"],
+  },
+  airtable: {
+    list_records:  ["data.records:read", "schema.bases:read"],
+    get_record:    ["data.records:read", "schema.bases:read"],
+    create_record: ["data.records:read", "data.records:write", "schema.bases:read"],
+    update_record: ["data.records:read", "data.records:write", "schema.bases:read"],
+    delete_record: ["data.records:read", "data.records:write", "schema.bases:read"],
+  },
+  hubspot: {
+    list_contacts:  ["crm.objects.contacts.read"],
+    get_contact:    ["crm.objects.contacts.read"],
+    create_contact: ["crm.objects.contacts.read", "crm.objects.contacts.write"],
+    update_contact: ["crm.objects.contacts.read", "crm.objects.contacts.write"],
+    list_deals:     ["crm.objects.deals.read"],
+    create_deal:    ["crm.objects.deals.read", "crm.objects.deals.write"],
+    update_deal:    ["crm.objects.deals.read", "crm.objects.deals.write"],
+  },
+  typeform: {
+    list_forms:     ["forms:read"],
+    get_form:       ["forms:read"],
+    list_responses: ["responses:read", "forms:read"],
+  },
+  asana: {
+    list_projects: ["default"],
+    list_tasks:    ["default"],
+    get_task:      ["default"],
+    create_task:   ["default"],
+    update_task:   ["default"],
+    complete_task: ["default"],
+  },
+  outlook: {
+    list_emails:  ["Mail.Read"],
+    read_email:   ["Mail.Read"],
+    send_email:   ["Mail.Send"],
+    reply_email:  ["Mail.Send"],
+    delete_email: ["Mail.ReadWrite"],
+    list_folders: ["Mail.Read"],
+    move_email:   ["Mail.ReadWrite"],
+  },
+};
+
 // ─── Cron presets ─────────────────────────────────────────────────────────────
 
 const CRON_PRESETS: { label: string; expression: string }[] = [
@@ -1618,9 +1720,17 @@ function ConnectionSidebar({
             <Select
               id="conn-op"
               value={oauthConfig.operation ?? ""}
-              onChange={(e) =>
-                onUpdate({ operation: e.target.value || undefined, operation_params: undefined })
-              }
+              onChange={(e) => {
+                const op = e.target.value || undefined;
+                const autoScopes = op
+                  ? (OPERATION_SCOPES[selectedProvider]?.[op] ?? [])
+                  : [];
+                onUpdate({
+                  operation: op,
+                  operation_params: undefined,
+                  ...(autoScopes.length > 0 ? { scope_required: autoScopes } : {}),
+                });
+              }}
             >
               <option value="">— pass token downstream —</option>
               {supportedOps.map((op) => (

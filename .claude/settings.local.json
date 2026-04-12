@@ -210,7 +210,13 @@
       "Bash(find /h/Archon/ARCHON_1/apps/web/components/ui -name \"*.tsx\" -exec basename {} \\\\;)",
       "Bash(supabase --version)",
       "Bash(curl -s \"http://localhost:3000/api/browse\")",
-      "Bash(wc -l \"H:\\\\Archon\\\\ARCHON_1/apps/runtime/connectors\"/*.py)"
+      "Bash(wc -l \"H:\\\\Archon\\\\ARCHON_1/apps/runtime/connectors\"/*.py)",
+      "Bash(find /h/Archon/ARCHON_1 -type f \\\\\\( -name \"*.py\" -o -name \"*.ts\" -o -name \"*.tsx\" \\\\\\) -exec grep -l \"notifications\\\\|notif\\\\|email.*approval\" {} \\\\;)",
+      "Bash(xargs wc:*)",
+      "Bash(node -e \"const p=require\\('./apps/web/package.json'\\); console.log\\(JSON.stringify\\({deps: p.dependencies, devDeps: p.devDependencies}, null, 2\\)\\)\")",
+      "Bash(New-Item -Path \"H:\\\\Archon\\\\ARCHON_1\\\\apps\\\\web\\\\app\\\\auth\\\\callback\\\\route.ts\" -ItemType File -Force)",
+      "Bash(Out-Null)",
+      "Bash(New-Item -Path \"H:\\\\Archon\\\\ARCHON_1\\\\apps\\\\web\\\\app\\\\\\(auth\\)\\\\update-password\\\\page.tsx\" -ItemType File -Force)"
     ]
   }
 }

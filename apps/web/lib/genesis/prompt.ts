@@ -41,8 +41,21 @@ Expressions use Python-like syntax on "data" dict. data['field'], data.get('k',d
   sort: {"logic_type":"sort","key":"created_at","order":"asc|desc"}
 
 CONNECTION NODE:
-  OAuth: connection field MUST match provided name exactly. Config: {"scope_access":"read|write|read_write","scope_required":["..."],"operation":"op_name","operation_params":{...}}
+  OAuth: connection field MUST match provided name exactly. Config: {"provider":"gmail|notion|slack|github|sheets|calendar|docs|drive|airtable|hubspot|typeform|asana|outlook","scope_access":"read|write|read_write","scope_required":["..."],"operation":"op_name","operation_params":{...}}
   HTTP: connection:null. Config: {"connector_type":"http","method":"GET|POST|PUT|PATCH|DELETE","url":"https://...","auth_type":"none|bearer|basic|api_key_header|api_key_query","auth_value":null,"query_params":[],"headers":[],"body":null,"parse_response":true,"timeout_seconds":30,"retry":null}
+
+EVENT TRIGGER SOURCES (use with trigger_type:"event"):
+  gmail:    event:"new_email" — fires when Gmail push notification arrives
+  slack:    event:"message" | "message.bot_message" | "reaction_added" | "channel_created"
+  github:   event:"issues.opened" | "issues.closed" | "pull_request.opened" | "pull_request.merged" | "push"
+  typeform: event:"form_response" — fires on every form submission. payload:{form_id,response_id,submitted_at,answers:{field_ref:value}}
+  airtable: event:"tableRecords.created" | "tableRecords.updated" | "tableRecords.destroyed" | "tableFields.changed" | "tableData.changed"
+            payload:{base_id,webhook_id,changed_tables:{table_id:{createdRecordsById,updatedRecordsById,destroyedRecordIds}}}
+            ⚠ Airtable payloads are sparse — always follow with a list_records or get_record node to fetch actual data
+  hubspot:  event:"contact.creation" | "contact.deletion" | "contact.propertyChange" | "deal.creation" | "deal.deletion" | "deal.propertyChange"
+            payload:{portal_id,subscription_type,object_id,property_name,property_value,events:[...]}
+  asana:    event:"task.added" | "task.removed" | "task.changed" | "task.completed" | "story.added" | "project.added"
+            payload:{resource_gid,resource_type,resource_name,parent_gid,action,events:[...]}
 
 OPERATION REFERENCE:
 

@@ -2,6 +2,7 @@ import { createServerClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/api";
 import { redirect } from "next/navigation";
 import { ApprovalCard } from "./approval-card";
+import { ApprovalsRealtimeRefresh } from "./realtime-refresh";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -77,6 +78,7 @@ export default async function ApprovalsPage() {
 
   return (
     <div className="space-y-6">
+      <ApprovalsRealtimeRefresh />
       <div>
         <h1 className="text-2xl font-semibold">Pending approvals</h1>
         <p className="text-sm text-muted-foreground mt-1">

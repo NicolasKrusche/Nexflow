@@ -95,18 +95,15 @@ function FlowDiagram() {
       aria-hidden
     >
       <defs>
-        {/* Dot grid */}
         <pattern id="dots" x="0" y="0" width="22" height="22" patternUnits="userSpaceOnUse">
           <circle cx="1" cy="1" r="1" fill="#ffffff" fillOpacity="0.04" />
         </pattern>
-        {/* Edge arrowhead */}
         <marker id="arrow-orange" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto">
           <path d="M0,1 L0,6 L6,3.5 z" fill="#f97316" fillOpacity="0.55" />
         </marker>
         <marker id="arrow-purple" markerWidth="7" markerHeight="7" refX="3.5" refY="3.5" orient="auto">
           <path d="M0,1 L0,6 L6,3.5 z" fill="#a855f7" fillOpacity="0.55" />
         </marker>
-        {/* Node glow filters */}
         <filter id="glow-orange" x="-20%" y="-20%" width="140%" height="140%">
           <feGaussianBlur stdDeviation="3" result="blur" />
           <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
@@ -117,89 +114,49 @@ function FlowDiagram() {
         </filter>
       </defs>
 
-      {/* Background */}
-      <rect width="660" height="220" rx="12" fill="#0c0a08" />
+      <rect width="660" height="220" rx="12" fill="#080808" />
       <rect width="660" height="220" rx="12" fill="url(#dots)" />
 
-      {/* Mini toolbar */}
-      <rect width="660" height="32" rx="12" fill="#141210" />
-      <rect y="12" width="660" height="20" fill="#141210" />
-      <circle cx="18" cy="16" r="4" fill="#3f3a36" />
-      <circle cx="32" cy="16" r="4" fill="#3f3a36" />
-      <circle cx="46" cy="16" r="4" fill="#3f3a36" />
-      <text x="330" y="21" fontSize="9" fill="#555" textAnchor="middle" fontFamily="system-ui">
+      <rect width="660" height="32" rx="12" fill="#111111" />
+      <rect y="12" width="660" height="20" fill="#111111" />
+      <circle cx="18" cy="16" r="4" fill="#2a2a2a" />
+      <circle cx="32" cy="16" r="4" fill="#2a2a2a" />
+      <circle cx="46" cy="16" r="4" fill="#2a2a2a" />
+      <text x="330" y="21" fontSize="9" fill="#444" textAnchor="middle" fontFamily="system-ui">
         Programs / Email Summary / editor
       </text>
 
-      {/* ── Edge: Trigger → Agent ── */}
-      <line
-        x1="205" y1="129"
-        x2="248" y2="129"
-        stroke="#f97316"
-        strokeWidth="1.5"
-        strokeOpacity="0.5"
-        strokeDasharray="5,3"
-        markerEnd="url(#arrow-orange)"
-        className="edge-animate"
-      />
+      <line x1="205" y1="129" x2="248" y2="129" stroke="#f97316" strokeWidth="1.5" strokeOpacity="0.5" strokeDasharray="5,3" markerEnd="url(#arrow-orange)" className="edge-animate" />
+      <line x1="415" y1="129" x2="458" y2="129" stroke="#a855f7" strokeWidth="1.5" strokeOpacity="0.5" strokeDasharray="5,3" markerEnd="url(#arrow-purple)" className="edge-animate" style={{ animationDelay: "0.4s" }} />
 
-      {/* ── Edge: Agent → Step ── */}
-      <line
-        x1="415" y1="129"
-        x2="458" y2="129"
-        stroke="#a855f7"
-        strokeWidth="1.5"
-        strokeOpacity="0.5"
-        strokeDasharray="5,3"
-        markerEnd="url(#arrow-purple)"
-        className="edge-animate"
-        style={{ animationDelay: "0.4s" }}
-      />
-
-      {/* ── Trigger Node ── */}
       <g filter="url(#glow-orange)">
-        <rect x="28" y="90" width="177" height="78" rx="8" fill="#110e0a" stroke="#f97316" strokeWidth="1.25" strokeOpacity="0.7" />
-        <rect x="28" y="98" width="177" height="14" fill="#f97316" fillOpacity="0.1" />
-        {/* Handle dot */}
+        <rect x="28" y="90" width="177" height="78" rx="8" fill="#0d0d0d" stroke="#f97316" strokeWidth="1.25" strokeOpacity="0.7" />
+        <rect x="28" y="98" width="177" height="14" fill="#f97316" fillOpacity="0.08" />
         <circle cx="205" cy="129" r="3.5" fill="#f97316" fillOpacity="0.8" />
-        {/* Label */}
         <text x="40" y="109" fontSize="7.5" fill="#f97316" fontFamily="monospace" fontWeight="700" letterSpacing="1.5">TRIGGER</text>
-        {/* Title */}
-        <text x="40" y="132" fontSize="11.5" fill="#f0ede8" fontWeight="600" fontFamily="system-ui">New Email Received</text>
-        {/* Subtitle */}
-        <text x="40" y="150" fontSize="9" fill="#6b6560" fontFamily="system-ui">via Gmail · unread</text>
+        <text x="40" y="132" fontSize="11.5" fill="#f0f0f0" fontWeight="600" fontFamily="system-ui">New Email Received</text>
+        <text x="40" y="150" fontSize="9" fill="#555" fontFamily="system-ui">via Gmail · unread</text>
       </g>
 
-      {/* ── Agent Node ── */}
       <g filter="url(#glow-agent)">
-        <rect x="248" y="90" width="167" height="78" rx="8" fill="#110e14" stroke="#a855f7" strokeWidth="1.5" strokeOpacity="0.75" />
-        <rect x="248" y="98" width="167" height="14" fill="#a855f7" fillOpacity="0.12" />
-        {/* Handles */}
+        <rect x="248" y="90" width="167" height="78" rx="8" fill="#0d0a12" stroke="#a855f7" strokeWidth="1.5" strokeOpacity="0.75" />
+        <rect x="248" y="98" width="167" height="14" fill="#a855f7" fillOpacity="0.1" />
         <circle cx="248" cy="129" r="3.5" fill="#a855f7" fillOpacity="0.8" />
         <circle cx="415" cy="129" r="3.5" fill="#a855f7" fillOpacity="0.8" />
-        {/* Label */}
         <text x="260" y="109" fontSize="7.5" fill="#a855f7" fontFamily="monospace" fontWeight="700" letterSpacing="1.5">AGENT</text>
-        {/* Title */}
-        <text x="260" y="132" fontSize="11.5" fill="#f0ede8" fontWeight="600" fontFamily="system-ui">AI Summarizer</text>
-        {/* Subtitle */}
-        <text x="260" y="150" fontSize="9" fill="#6b6560" fontFamily="system-ui">GPT-4o · 3 tools assigned</text>
+        <text x="260" y="132" fontSize="11.5" fill="#f0f0f0" fontWeight="600" fontFamily="system-ui">AI Summarizer</text>
+        <text x="260" y="150" fontSize="9" fill="#555" fontFamily="system-ui">GPT-4o · 3 tools assigned</text>
       </g>
 
-      {/* ── Step Node ── */}
       <g>
-        <rect x="458" y="90" width="167" height="78" rx="8" fill="#0c110e" stroke="#10b981" strokeWidth="1.25" strokeOpacity="0.65" />
-        <rect x="458" y="98" width="167" height="14" fill="#10b981" fillOpacity="0.1" />
-        {/* Handle */}
+        <rect x="458" y="90" width="167" height="78" rx="8" fill="#0a0f0d" stroke="#10b981" strokeWidth="1.25" strokeOpacity="0.65" />
+        <rect x="458" y="98" width="167" height="14" fill="#10b981" fillOpacity="0.08" />
         <circle cx="458" cy="129" r="3.5" fill="#10b981" fillOpacity="0.8" />
-        {/* Label */}
         <text x="470" y="109" fontSize="7.5" fill="#10b981" fontFamily="monospace" fontWeight="700" letterSpacing="1.5">STEP</text>
-        {/* Title */}
-        <text x="470" y="132" fontSize="11.5" fill="#f0ede8" fontWeight="600" fontFamily="system-ui">Save to Notion</text>
-        {/* Subtitle */}
-        <text x="470" y="150" fontSize="9" fill="#6b6560" fontFamily="system-ui">append_to_page · inbox</text>
+        <text x="470" y="132" fontSize="11.5" fill="#f0f0f0" fontWeight="600" fontFamily="system-ui">Save to Notion</text>
+        <text x="470" y="150" fontSize="9" fill="#555" fontFamily="system-ui">append_to_page · inbox</text>
       </g>
 
-      {/* Status badge — bottom right */}
       <rect x="558" y="192" width="84" height="18" rx="9" fill="#10b981" fillOpacity="0.12" />
       <circle cx="570" cy="201" r="3" fill="#10b981" fillOpacity="0.9" />
       <text x="577" y="205" fontSize="8.5" fill="#10b981" fontFamily="system-ui" fontWeight="500">Running…</text>
@@ -210,20 +167,19 @@ function FlowDiagram() {
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
 export default function LandingPage() {
+  // Duplicate connectors for seamless marquee loop
+  const marqueeItems = [...CONNECTORS, ...CONNECTORS];
+
   return (
     <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
 
       {/* ── Nav ── */}
-      <header className="sticky top-0 z-50 border-b border-border/60 bg-background/80 backdrop-blur-md">
+      <header className="sticky top-0 z-50 border-b border-border bg-background/90 backdrop-blur-md">
         <div className="mx-auto max-w-6xl flex items-center justify-between px-6 h-14">
           <div className="flex items-center gap-2.5">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/pictures/logo-no-bg.png"
-              alt="Nexflow"
-              className="h-7 w-7 object-contain"
-            />
-            <span className="font-bold text-base tracking-tight">Nexflow</span>
+            <img src="/pictures/logo-no-bg.png" alt="Nexflow" className="h-6 w-6 object-contain" />
+            <span className="font-semibold text-sm tracking-tight">Nexflow</span>
           </div>
           <nav className="hidden md:flex items-center gap-6 text-sm text-muted-foreground">
             <a href="#how-it-works" className="hover:text-foreground transition-colors">How it works</a>
@@ -231,15 +187,12 @@ export default function LandingPage() {
             <a href="#integrations" className="hover:text-foreground transition-colors">Integrations</a>
           </nav>
           <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
+            <Link href="/login" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Sign in
             </Link>
             <Link
               href="/signup"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-1.75 text-sm font-semibold text-primary-foreground shadow-[0_0_16px_rgba(249,115,22,0.35)] hover:opacity-90 transition-opacity"
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-1.5 text-sm font-semibold text-primary-foreground shadow-[0_0_20px_rgba(249,115,22,0.3)] hover:opacity-90 transition-opacity"
             >
               Get started free
               <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
@@ -252,18 +205,23 @@ export default function LandingPage() {
 
       {/* ── Hero ── */}
       <section className="relative flex flex-col items-center text-center px-6 pt-20 pb-16 overflow-hidden">
-        {/* Background glow */}
-        <div className="pointer-events-none absolute inset-0 -top-20"
-          style={{ background: "radial-gradient(ellipse 70% 40% at 50% 0%, rgba(249,115,22,0.12) 0%, transparent 70%)" }}
+        {/* Dot grid */}
+        <div className="pointer-events-none absolute inset-0 bg-grid-dots" />
+        {/* Orange glow */}
+        <div
+          className="pointer-events-none absolute inset-0 -top-20"
+          style={{ background: "radial-gradient(ellipse 60% 45% at 50% 0%, rgba(249,115,22,0.15) 0%, transparent 70%)" }}
         />
+        {/* Bottom fade */}
+        <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-background to-transparent" />
 
         {/* Announcement badge */}
-        <div className="animate-fade-up relative z-10 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/8 px-4 py-1.5 text-xs font-medium text-primary mb-7">
+        <div className="animate-fade-up relative z-10 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/8 px-4 py-1.5 text-xs font-medium text-primary mb-7">
           <span className="relative flex h-1.5 w-1.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60"></span>
-            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary"></span>
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60" />
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary" />
           </span>
-          10+ integrations — Gmail, Slack, Notion, GitHub &amp; more
+          12 integrations — Gmail, Slack, Notion, GitHub &amp; more
         </div>
 
         {/* Headline */}
@@ -285,7 +243,7 @@ export default function LandingPage() {
         <div className="animate-fade-up-delay-3 relative z-10 mt-8 flex flex-col sm:flex-row items-center gap-3">
           <Link
             href="/signup"
-            className="inline-flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-[0_0_24px_rgba(249,115,22,0.4)] hover:opacity-90 transition-opacity"
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-6 py-2.5 text-sm font-semibold text-primary-foreground shadow-[0_0_28px_rgba(249,115,22,0.4)] hover:opacity-90 transition-opacity"
           >
             Start for free
             <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
@@ -294,30 +252,34 @@ export default function LandingPage() {
           </Link>
           <Link
             href="/login"
-            className="inline-flex items-center gap-2 rounded-lg border border-border bg-background/50 px-6 py-3 text-sm font-medium text-foreground hover:bg-accent transition-colors"
+            className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-6 py-2.5 text-sm font-medium text-foreground hover:bg-accent transition-colors"
           >
             Sign in to dashboard
           </Link>
         </div>
 
         {/* Flow diagram */}
-        <div className="animate-fade-up-delay-4 relative z-10 mt-14 w-full max-w-3xl rounded-xl border border-border/70 shadow-[0_0_60px_rgba(249,115,22,0.08)] overflow-hidden">
+        <div className="animate-fade-up-delay-4 relative z-10 mt-14 w-full max-w-3xl rounded-xl border border-border shadow-[0_0_80px_rgba(249,115,22,0.06),0_32px_64px_rgba(0,0,0,0.5)] overflow-hidden">
           <FlowDiagram />
         </div>
       </section>
 
-      {/* ── Connector strip ── */}
-      <section id="integrations" className="border-y border-border/60 bg-card/40 py-10 px-6">
-        <div className="mx-auto max-w-4xl text-center">
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-6">
-            Connects to your entire stack
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-2.5">
-            {CONNECTORS.map((name) => (
+      {/* ── Connector marquee ── */}
+      <section id="integrations" className="border-y border-border py-10 overflow-hidden">
+        <p className="text-center text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-7">
+          Connects to your entire stack
+        </p>
+        <div className="relative">
+          {/* Fade edges */}
+          <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-background to-transparent z-10" />
+          <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-background to-transparent z-10" />
+          <div className="flex gap-3 animate-marquee whitespace-nowrap">
+            {marqueeItems.map((name, i) => (
               <span
-                key={name}
-                className="rounded-full border border-border px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:border-primary/50 hover:text-foreground transition-colors cursor-default"
+                key={`${name}-${i}`}
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-4 py-1.5 text-xs font-medium text-muted-foreground shrink-0"
               >
+                <span className="w-1.5 h-1.5 rounded-full bg-primary/40 shrink-0" />
                 {name}
               </span>
             ))}
@@ -328,16 +290,26 @@ export default function LandingPage() {
       {/* ── How it works ── */}
       <section id="how-it-works" className="py-24 px-6">
         <div className="mx-auto max-w-5xl">
-          <div className="text-center mb-14">
+          <div className="text-center mb-16">
             <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-3">How it works</p>
             <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">Three steps to production</h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {HOW_IT_WORKS.map((item) => (
-              <div key={item.step} className="flex flex-col gap-4">
-                <span className="text-4xl font-black text-primary/20 leading-none">{item.step}</span>
+          <div className="relative grid grid-cols-1 md:grid-cols-3 gap-8">
+            {/* Connecting line (desktop only) */}
+            <div className="hidden md:block absolute top-6 left-[calc(16.666%+1rem)] right-[calc(16.666%+1rem)] h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+            {HOW_IT_WORKS.map((item, i) => (
+              <div key={item.step} className="relative flex flex-col gap-5">
+                {/* Step number circle */}
+                <div className="relative z-10 flex items-center gap-3">
+                  <div className="flex-shrink-0 w-12 h-12 rounded-full border border-border bg-card flex items-center justify-center">
+                    <span className="text-sm font-bold text-primary">{item.step}</span>
+                  </div>
+                  {i < HOW_IT_WORKS.length - 1 && (
+                    <div className="md:hidden flex-1 h-px bg-border" />
+                  )}
+                </div>
                 <div>
-                  <h3 className="text-lg font-semibold mb-2">{item.title}</h3>
+                  <h3 className="text-base font-semibold mb-2">{item.title}</h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">{item.body}</p>
                 </div>
               </div>
@@ -347,24 +319,31 @@ export default function LandingPage() {
       </section>
 
       {/* ── Features ── */}
-      <section id="features" className="py-24 px-6 border-t border-border/60">
+      <section id="features" className="py-24 px-6 border-t border-border">
         <div className="mx-auto max-w-5xl">
-          <div className="text-center mb-14">
+          <div className="text-center mb-16">
             <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-3">Features</p>
             <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">
               Everything you need to automate at scale
             </h2>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {FEATURES.map((f) => (
               <div
                 key={f.title}
-                className="group rounded-xl border border-border bg-card p-6 flex flex-col gap-4 hover:border-primary/40 hover:bg-accent/30 transition-all duration-200"
+                className="group relative rounded-xl border border-border bg-card p-6 flex flex-col gap-4 overflow-hidden transition-all duration-200 hover:border-primary/30"
+                style={{ background: "linear-gradient(135deg, hsl(0 0% 5.5%) 0%, hsl(0 0% 5.5%) 100%)" }}
               >
-                <div className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-primary/10 text-primary group-hover:bg-primary/15 transition-colors">
+                {/* Subtle glow on hover */}
+                <div className="pointer-events-none absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                  style={{ background: "radial-gradient(circle at 30% 20%, rgba(249,115,22,0.06) 0%, transparent 60%)" }}
+                />
+                {/* Top accent line */}
+                <div className="absolute top-0 left-6 right-6 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                <div className="relative inline-flex items-center justify-center w-9 h-9 rounded-lg bg-primary/10 text-primary">
                   {f.icon}
                 </div>
-                <div>
+                <div className="relative">
                   <h3 className="font-semibold text-sm mb-1.5">{f.title}</h3>
                   <p className="text-xs text-muted-foreground leading-relaxed">{f.body}</p>
                 </div>
@@ -375,44 +354,51 @@ export default function LandingPage() {
       </section>
 
       {/* ── CTA ── */}
-      <section className="py-24 px-6 border-t border-border/60">
-        <div className="mx-auto max-w-2xl text-center">
+      <section className="py-24 px-6 border-t border-border">
+        <div className="mx-auto max-w-xl text-center">
           <div
-            className="relative rounded-2xl border border-primary/20 p-12 overflow-hidden"
-            style={{ background: "radial-gradient(ellipse 80% 60% at 50% 100%, rgba(249,115,22,0.1) 0%, transparent 70%)" }}
+            className="relative rounded-2xl border border-border p-12 overflow-hidden"
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/pictures/logo-no-bg.png"
-              alt=""
-              aria-hidden
-              className="mx-auto h-14 w-14 object-contain mb-6 opacity-90"
+            {/* Background */}
+            <div className="pointer-events-none absolute inset-0 bg-grid-dots opacity-50" />
+            <div
+              className="pointer-events-none absolute inset-0"
+              style={{ background: "radial-gradient(ellipse 80% 60% at 50% 100%, rgba(249,115,22,0.12) 0%, transparent 70%)" }}
             />
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">
-              Start automating today
-            </h2>
-            <p className="text-muted-foreground mb-8 leading-relaxed">
-              Free to start. No credit card required. Your first two programs are on us.
-            </p>
-            <Link
-              href="/signup"
-              className="inline-flex items-center gap-2 rounded-lg bg-primary px-8 py-3.5 text-sm font-semibold text-primary-foreground shadow-[0_0_32px_rgba(249,115,22,0.45)] hover:opacity-90 transition-opacity"
-            >
-              Create free account
-              <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
-                <path fillRule="evenodd" d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
-              </svg>
-            </Link>
+            <div className="relative z-10">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/pictures/logo-no-bg.png"
+                alt=""
+                aria-hidden
+                className="mx-auto h-12 w-12 object-contain mb-6 opacity-80"
+              />
+              <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">
+                Start automating today
+              </h2>
+              <p className="text-muted-foreground mb-8 text-sm leading-relaxed">
+                Free to start. No credit card required.<br />Your first two programs are on us.
+              </p>
+              <Link
+                href="/signup"
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-8 py-3 text-sm font-semibold text-primary-foreground shadow-[0_0_40px_rgba(249,115,22,0.5)] hover:opacity-90 transition-opacity"
+              >
+                Create free account
+                <svg viewBox="0 0 16 16" fill="currentColor" className="w-3.5 h-3.5">
+                  <path fillRule="evenodd" d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
+                </svg>
+              </Link>
+            </div>
           </div>
         </div>
       </section>
 
       {/* ── Footer ── */}
-      <footer className="border-t border-border/60 px-6 py-6">
+      <footer className="border-t border-border px-6 py-6">
         <div className="mx-auto max-w-6xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
           <div className="flex items-center gap-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/pictures/logo-no-bg.png" alt="" aria-hidden className="h-5 w-5 object-contain opacity-60" />
+            <img src="/pictures/logo-no-bg.png" alt="" aria-hidden className="h-4 w-4 object-contain opacity-50" />
             <span>© {new Date().getFullYear()} Nexflow. All rights reserved.</span>
           </div>
           <div className="flex items-center gap-4">

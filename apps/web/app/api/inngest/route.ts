@@ -1,6 +1,8 @@
 import { serve } from "inngest/next";
 import { inngest } from "@/lib/inngest";
 import { cronRunner } from "@/lib/inngest/cron-runner";
+import { approvalNotifier } from "@/lib/inngest/approval-notifier";
+import { approvalTimeout } from "@/lib/inngest/approval-timeout";
 
 /**
  * Inngest serve endpoint — handles all function registrations + event delivery.
@@ -9,5 +11,5 @@ import { cronRunner } from "@/lib/inngest/cron-runner";
  */
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [cronRunner],
+  functions: [cronRunner, approvalNotifier, approvalTimeout],
 });

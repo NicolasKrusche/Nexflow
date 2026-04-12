@@ -4,50 +4,49 @@
 
 @layer base {
   :root {
-    /* Dark-first theme — orange brand accent */
-    --background: 20 14% 4%;
-    --foreground: 0 0% 95%;
-    --card: 20 10% 7%;
-    --card-foreground: 0 0% 95%;
-    --popover: 20 10% 7%;
-    --popover-foreground: 0 0% 95%;
-    --primary: 22 95% 50%;
+    /* Neutral dark — orange brand accent */
+    --background: 0 0% 3.5%;
+    --foreground: 0 0% 96%;
+    --card: 0 0% 5.5%;
+    --card-foreground: 0 0% 96%;
+    --popover: 0 0% 5.5%;
+    --popover-foreground: 0 0% 96%;
+    --primary: 22 95% 52%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 20 8% 13%;
-    --secondary-foreground: 0 0% 95%;
-    --muted: 20 8% 13%;
-    --muted-foreground: 20 6% 58%;
-    --accent: 20 8% 16%;
-    --accent-foreground: 0 0% 95%;
+    --secondary: 0 0% 9%;
+    --secondary-foreground: 0 0% 96%;
+    --muted: 0 0% 9%;
+    --muted-foreground: 0 0% 44%;
+    --accent: 0 0% 9%;
+    --accent-foreground: 0 0% 96%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 98%;
-    --border: 20 8% 16%;
-    --input: 20 8% 16%;
-    --ring: 22 95% 50%;
-    --radius: 0.625rem;
+    --border: 0 0% 11%;
+    --input: 0 0% 11%;
+    --ring: 22 95% 52%;
+    --radius: 0.5rem;
   }
 
-  /* Keep .dark identical so Tailwind dark: variants resolve correctly */
   .dark {
-    --background: 20 14% 4%;
-    --foreground: 0 0% 95%;
-    --card: 20 10% 7%;
-    --card-foreground: 0 0% 95%;
-    --popover: 20 10% 7%;
-    --popover-foreground: 0 0% 95%;
-    --primary: 22 95% 50%;
+    --background: 0 0% 3.5%;
+    --foreground: 0 0% 96%;
+    --card: 0 0% 5.5%;
+    --card-foreground: 0 0% 96%;
+    --popover: 0 0% 5.5%;
+    --popover-foreground: 0 0% 96%;
+    --primary: 22 95% 52%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 20 8% 13%;
-    --secondary-foreground: 0 0% 95%;
-    --muted: 20 8% 13%;
-    --muted-foreground: 20 6% 58%;
-    --accent: 20 8% 16%;
-    --accent-foreground: 0 0% 95%;
+    --secondary: 0 0% 9%;
+    --secondary-foreground: 0 0% 96%;
+    --muted: 0 0% 9%;
+    --muted-foreground: 0 0% 44%;
+    --accent: 0 0% 9%;
+    --accent-foreground: 0 0% 96%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 98%;
-    --border: 20 8% 16%;
-    --input: 20 8% 16%;
-    --ring: 22 95% 50%;
+    --border: 0 0% 11%;
+    --input: 0 0% 11%;
+    --ring: 22 95% 52%;
   }
 }
 
@@ -60,43 +59,36 @@
   }
 }
 
-/* ── Animated dash flow for the hero SVG edges ── */
+/* ── Dot grid background ── */
+.bg-grid-dots {
+  background-image: radial-gradient(circle, rgba(255,255,255,0.055) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* ── Animated dash flow for SVG edges ── */
 @keyframes dash-flow {
-  to {
-    stroke-dashoffset: -24;
-  }
+  to { stroke-dashoffset: -24; }
 }
 .edge-animate {
   animation: dash-flow 1.6s linear infinite;
 }
 
-/* ── Subtle fade-up for hero content ── */
+/* ── Marquee scroll ── */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.animate-marquee {
+  animation: marquee 28s linear infinite;
+}
+
+/* ── Fade up ── */
 @keyframes fade-up {
-  from {
-    opacity: 0;
-    transform: translateY(16px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-.animate-fade-up {
-  animation: fade-up 0.6s ease forwards;
-}
-.animate-fade-up-delay-1 {
-  opacity: 0;
-  animation: fade-up 0.6s ease 0.1s forwards;
-}
-.animate-fade-up-delay-2 {
-  opacity: 0;
-  animation: fade-up 0.6s ease 0.2s forwards;
-}
-.animate-fade-up-delay-3 {
-  opacity: 0;
-  animation: fade-up 0.6s ease 0.35s forwards;
-}
-.animate-fade-up-delay-4 {
-  opacity: 0;
-  animation: fade-up 0.6s ease 0.5s forwards;
-}
+.animate-fade-up { animation: fade-up 0.6s ease forwards; }
+.animate-fade-up-delay-1 { opacity: 0; animation: fade-up 0.6s ease 0.1s forwards; }
+.animate-fade-up-delay-2 { opacity: 0; animation: fade-up 0.6s ease 0.2s forwards; }
+.animate-fade-up-delay-3 { opacity: 0; animation: fade-up 0.6s ease 0.35s forwards; }
+.animate-fade-up-delay-4 { opacity: 0; animation: fade-up 0.6s ease 0.5s forwards; }

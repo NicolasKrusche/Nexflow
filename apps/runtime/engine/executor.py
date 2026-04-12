@@ -952,6 +952,14 @@ class ProgramExecutor:
             self.db, self.run_id, node.id, status="waiting_approval"
         )
 
+        # Determine timeout_hours early so it can be stored in context for
+        # the DB-level timeout enforcer (approval-timeout Inngest function).
+        timeout_hours = 24.0
+        if node.type == "agent":
+            cfg: AgentConfig = node.config  # type: ignore[assignment]
+            if hasattr(cfg, "approval_timeout_hours"):
+                timeout_hours = float(cfg.approval_timeout_hours)
+
         await create_approval(
             self.db,
             node_exec_id,
@@ -962,15 +970,17 @@ class ProgramExecutor:
                 "program_id": self.schema.program_id,
                 "reason": reason,
                 "execution_mode": self.execution_mode,
+                "timeout_hours": timeout_hours,
             },
         )
 
         # Determine timeout
-        timeout_seconds = 86400  # 24h default for supervised/manual
+        timeout_hours = 24.0  # default for supervised/manual
         if node.type == "agent":
             cfg: AgentConfig = node.config  # type: ignore[assignment]
             if hasattr(cfg, "approval_timeout_hours"):
-                timeout_seconds = cfg.approval_timeout_hours * 3600
+                timeout_hours = float(cfg.approval_timeout_hours)
+        timeout_seconds = timeout_hours * 3600
 
         deadline = time.time() + timeout_seconds
         poll_interval = 5  # seconds
