@@ -4,6 +4,14 @@ from .notion import NotionConnector
 from .slack import SlackConnector
 from .github import GitHubConnector
 from .sheets import SheetsConnector
+from .calendar import CalendarConnector
+from .docs import DocsConnector
+from .drive import DriveConnector
+from .airtable import AirtableConnector
+from .hubspot import HubSpotConnector
+from .asana import AsanaConnector
+from .typeform import TypeformConnector
+from .outlook import OutlookConnector
 
 REGISTRY: dict[str, type[IConnector]] = {
     "gmail": GmailConnector,
@@ -11,6 +19,14 @@ REGISTRY: dict[str, type[IConnector]] = {
     "slack": SlackConnector,
     "github": GitHubConnector,
     "sheets": SheetsConnector,
+    "calendar": CalendarConnector,
+    "docs": DocsConnector,
+    "drive": DriveConnector,
+    "airtable": AirtableConnector,
+    "hubspot": HubSpotConnector,
+    "asana": AsanaConnector,
+    "typeform": TypeformConnector,
+    "outlook": OutlookConnector,
 }
 
 
@@ -27,6 +43,14 @@ __all__ = [
     "SlackConnector",
     "GitHubConnector",
     "SheetsConnector",
+    "CalendarConnector",
+    "DocsConnector",
+    "DriveConnector",
+    "AirtableConnector",
+    "HubSpotConnector",
+    "AsanaConnector",
+    "TypeformConnector",
+    "OutlookConnector",
     "REGISTRY",
     "get_connector",
 ]

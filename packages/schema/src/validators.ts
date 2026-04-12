@@ -177,6 +177,7 @@ export const ConnectionNodeZ = NodeBaseZ.extend({
     z.object({
       // Optional for backward compatibility with older schemas.
       connector_type: z.literal("oauth").optional(),
+      provider: z.string().optional(),
       scope_access: z.enum(["read", "write", "read_write"]),
       scope_required: z.array(z.string()),
       operation: z.string().optional(),

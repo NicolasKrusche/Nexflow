@@ -123,6 +123,10 @@ export interface OAuthConnectionConfig {
   // Optional for backward compatibility with existing schemas that
   // predate connector_type.
   connector_type?: "oauth";
+  // Provider slug (e.g. "gmail", "slack"). Set when a node is created from the
+  // palette so the sidebar knows which operations to show before a connection
+  // is selected, and to filter the connection dropdown to matching accounts.
+  provider?: string;
   scope_access: "read" | "write" | "read_write";
   scope_required: string[];
   // Native connector operation to execute (e.g. "send_email", "read_range").

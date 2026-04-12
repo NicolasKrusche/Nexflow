@@ -209,7 +209,8 @@
       "Bash(taskkill //F //PID 52068)",
       "Bash(find /h/Archon/ARCHON_1/apps/web/components/ui -name \"*.tsx\" -exec basename {} \\\\;)",
       "Bash(supabase --version)",
-      "Bash(curl -s \"http://localhost:3000/api/browse\")"
+      "Bash(curl -s \"http://localhost:3000/api/browse\")",
+      "Bash(wc -l \"H:\\\\Archon\\\\ARCHON_1/apps/runtime/connectors\"/*.py)"
     ]
   }
 }

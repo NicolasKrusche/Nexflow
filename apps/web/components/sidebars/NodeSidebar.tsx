@@ -62,14 +62,14 @@ const CONNECTOR_OPERATIONS: Record<string, string[]> = {
   github:   ["create_issue", "comment_on_issue", "list_prs", "get_pr_diff", "push_file"],
   sheets:   ["read_range", "write_range", "append_row", "list_sheets", "create_sheet", "clear_range"],
   // ── Connectors planned (operations will work once connector is added) ────────
-  calendar: ["list_events", "create_event", "update_event", "delete_event"],
+  calendar: ["list_events", "get_event", "create_event", "update_event", "delete_event"],
   docs:     ["read_document", "create_document", "append_to_document", "replace_text"],
   drive:    ["list_files", "get_file_metadata", "create_folder", "delete_file", "share_file"],
   airtable: ["list_records", "get_record", "create_record", "update_record", "delete_record"],
-  hubspot:  ["list_contacts", "get_contact", "create_contact", "update_contact", "list_deals", "create_deal"],
-  typeform: ["list_forms", "get_form", "list_responses", "get_response"],
-  asana:    ["list_tasks", "get_task", "create_task", "update_task", "list_projects"],
-  outlook:  ["list_emails", "read_email", "send_email", "reply_email", "delete_email"],
+  hubspot:  ["list_contacts", "get_contact", "create_contact", "update_contact", "list_deals", "create_deal", "update_deal"],
+  typeform: ["list_forms", "get_form", "list_responses"],
+  asana:    ["list_tasks", "get_task", "create_task", "update_task", "complete_task", "list_projects"],
+  outlook:  ["list_emails", "read_email", "send_email", "reply_email", "delete_email", "list_folders", "move_email"],
 };
 
 // ─── Structured param schemas per provider+operation ──────────────────────────
@@ -234,6 +234,10 @@ const OPERATION_PARAM_FIELDS: Record<string, Record<string, ParamField[]>> = {
       { key: "time_max", label: "To (ISO 8601)", type: "string" },
       { key: "max_results", label: "Max results", type: "number", placeholder: "10" },
     ],
+    get_event: [
+      { key: "event_id", label: "Event ID", type: "string", required: true },
+      { key: "calendar_id", label: "Calendar ID", type: "string", placeholder: "primary" },
+    ],
     create_event: [
       { key: "calendar_id", label: "Calendar ID", type: "string", placeholder: "primary" },
       { key: "summary", label: "Title", type: "string", required: true },
@@ -345,6 +349,10 @@ const OPERATION_PARAM_FIELDS: Record<string, Record<string, ParamField[]>> = {
     create_deal: [
       { key: "properties", label: "Properties", type: "json", required: true, hint: '{"dealname":"Big Deal","amount":"10000"}' },
     ],
+    update_deal: [
+      { key: "deal_id", label: "Deal ID", type: "string", required: true },
+      { key: "properties", label: "Properties to update", type: "json", required: true },
+    ],
   },
   typeform: {
     list_forms: [
@@ -360,10 +368,6 @@ const OPERATION_PARAM_FIELDS: Record<string, Record<string, ParamField[]>> = {
       { key: "since", label: "Since (ISO 8601)", type: "string" },
       { key: "until", label: "Until (ISO 8601)", type: "string" },
       { key: "completed", label: "Completed only", type: "boolean" },
-    ],
-    get_response: [
-      { key: "form_id", label: "Form ID", type: "string", required: true },
-      { key: "response_id", label: "Response ID", type: "string", required: true },
     ],
   },
   asana: {
@@ -389,6 +393,9 @@ const OPERATION_PARAM_FIELDS: Record<string, Record<string, ParamField[]>> = {
       { key: "notes", label: "Notes", type: "text" },
       { key: "due_on", label: "Due date (YYYY-MM-DD)", type: "string" },
       { key: "completed", label: "Completed", type: "boolean" },
+    ],
+    complete_task: [
+      { key: "task_id", label: "Task GID", type: "string", required: true },
     ],
     list_projects: [
       { key: "workspace_id", label: "Workspace GID", type: "string", required: true },
@@ -416,6 +423,11 @@ const OPERATION_PARAM_FIELDS: Record<string, Record<string, ParamField[]>> = {
     ],
     delete_email: [
       { key: "message_id", label: "Message ID", type: "string", required: true },
+    ],
+    list_folders: [],
+    move_email: [
+      { key: "message_id", label: "Message ID", type: "string", required: true },
+      { key: "destination_folder", label: "Destination folder", type: "string", placeholder: "archive", required: true, hint: 'Folder ID or well-known name: inbox, archive, deleteditems, sentitems' },
     ],
   },
 };
@@ -1551,8 +1563,18 @@ function ConnectionSidebar({
       operation_params?: Record<string, unknown>;
     };
 
-    const selectedProvider = availableConnections.find((c) => c.name === nodeConnection)?.provider ?? "";
+    // Provider resolved from selected connection, falling back to the hint
+    // stored in config when the node was created from the palette.
+    const selectedProvider =
+      availableConnections.find((c) => c.name === nodeConnection)?.provider ??
+      oauthConfig.provider ??
+      "";
     const supportedOps = CONNECTOR_OPERATIONS[selectedProvider] ?? [];
+
+    // Only show connections that match the intended provider (if known).
+    const filteredConnections = oauthConfig.provider
+      ? availableConnections.filter((c) => c.provider === oauthConfig.provider)
+      : availableConnections;
 
     function handleConnectionChange(name: string) {
       const newProvider = availableConnections.find((c) => c.name === name)?.provider ?? "";
@@ -1567,7 +1589,7 @@ function ConnectionSidebar({
     return (
       <div className="space-y-3">
         {/* Connection selector */}
-        {availableConnections.length > 0 ? (
+        {filteredConnections.length > 0 ? (
           <FieldGroup label="Connection" htmlFor="conn-select">
             <Select
               id="conn-select"
@@ -1575,16 +1597,18 @@ function ConnectionSidebar({
               onChange={(e) => handleConnectionChange(e.target.value)}
             >
               <option value="">— none —</option>
-              {availableConnections.map((c) => (
+              {filteredConnections.map((c) => (
                 <option key={c.name} value={c.name}>
-                  {c.name} ({c.provider})
+                  {c.name}
                 </option>
               ))}
             </Select>
           </FieldGroup>
         ) : (
           <div className="rounded-md bg-muted px-3 py-2 text-[11px] text-muted-foreground">
-            No connections linked to this program. Add connections on the program detail page.
+            {oauthConfig.provider
+              ? `No ${oauthConfig.provider} account connected. Go to Connections to add one.`
+              : "No connections linked to this program. Add connections on the program detail page."}
           </div>
         )}
 

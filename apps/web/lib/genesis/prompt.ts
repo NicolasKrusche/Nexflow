@@ -87,6 +87,71 @@ SHEETS:
   list_sheets: params={spreadsheet_id(REQUIRED)} → output:{sheets:[{title,sheet_id}]}
   clear_range: params={spreadsheet_id,range(both REQUIRED)}
 
+GOOGLE CALENDAR (provider: google_calendar):
+  list_events: params={calendar_id:"primary",time_min?,time_max?,query?,max_results?} → output:{events:[{id,summary,start,end,status,html_link}]}
+    time_min/time_max: ISO8601 datetime strings e.g. "2026-04-12T00:00:00Z"
+  get_event: params={event_id(REQUIRED),calendar_id:"primary"} → output:{id,summary,description,start,end,attendees,location,status,html_link}
+  create_event: params={summary,start,end(all REQUIRED),calendar_id:"primary",description?,location?,attendees?:[email,...]} → output:{id,html_link,status}
+    start/end: {dateTime:"2026-04-12T10:00:00Z",timeZone:"UTC"} for timed events, {date:"2026-04-12"} for all-day
+  update_event: params={event_id(REQUIRED),calendar_id:"primary",summary?,description?,location?,start?,end?,attendees?} → output:{id,html_link,status}
+  delete_event: params={event_id(REQUIRED),calendar_id:"primary"} → output:{event_id,deleted:true}
+
+GOOGLE DOCS (provider: google_docs):
+  read_document: params={document_id(REQUIRED)} → output:{document_id,title,text,revision_id}
+  create_document: params={title?,content?} → output:{document_id,title}
+  append_text: params={document_id(REQUIRED),text(REQUIRED)} → output:{document_id,appended:true}
+  replace_text: params={document_id(REQUIRED),find(REQUIRED),replace?,match_case?} → output:{document_id,occurrences_replaced}
+
+GOOGLE DRIVE (provider: google_drive):
+  list_files: params={query?,folder_id?,mime_type?,max_results?} → output:{files:[{id,name,mimeType,size,modifiedTime,webViewLink}]}
+    mime_type examples: "application/vnd.google-apps.spreadsheet", "application/pdf", "application/vnd.google-apps.document"
+  get_file: params={file_id(REQUIRED)} → output:{id,name,mimeType,size,modifiedTime,webViewLink,description}
+  create_folder: params={name(REQUIRED),parent_id?} → output:{folder_id,name}
+  move_file: params={file_id(REQUIRED),folder_id(REQUIRED)} → output:{file_id,name,moved:true}
+  delete_file: params={file_id(REQUIRED)} → output:{file_id,deleted:true}
+
+AIRTABLE (provider: airtable):
+  list_records: params={base_id(REQUIRED),table_name(REQUIRED),view?,filter_formula?,sort_field?,sort_direction?,max_records?} → output:{records:[{id,fields:{...}}]}
+  get_record: params={base_id(REQUIRED),table_name(REQUIRED),record_id(REQUIRED)} → output:{id,fields:{...}}
+  create_record: params={base_id(REQUIRED),table_name(REQUIRED),fields:{field_name:value,...}(REQUIRED)} → output:{record_id,fields}
+  update_record: params={base_id(REQUIRED),table_name(REQUIRED),record_id(REQUIRED),fields:{...}(REQUIRED)} → output:{record_id,fields}
+  delete_record: params={base_id(REQUIRED),table_name(REQUIRED),record_id(REQUIRED)} → output:{record_id,deleted:true}
+
+HUBSPOT (provider: hubspot):
+  list_contacts: params={limit?,properties?:[...]} → output:{contacts:[{id,email,firstname,lastname,...}]}
+  get_contact: params={contact_id? OR email?} → output:{id,email,firstname,lastname,phone,company}
+  create_contact: params={email(REQUIRED),firstname?,lastname?,phone?,company?} → output:{id,email,...}
+  update_contact: params={contact_id(REQUIRED),firstname?,lastname?,email?,phone?,company?} → output:{id,...}
+  list_deals: params={limit?,properties?:[...]} → output:{deals:[{id,dealname,amount,dealstage,closedate}]}
+  create_deal: params={deal_name(REQUIRED),amount?,dealstage?,closedate?,pipeline?} → output:{id,dealname,...}
+  update_deal: params={deal_id(REQUIRED),deal_name?,amount?,dealstage?,closedate?,pipeline?} → output:{id,...}
+
+ASANA (provider: asana):
+  list_projects: params={workspace_id?,limit?} → output:{projects:[{gid,name,color,archived}]}
+  list_tasks: params={project_id(REQUIRED),completed?,limit?} → output:{tasks:[{gid,name,completed,due_on,notes}]}
+  get_task: params={task_id(REQUIRED)} → output:{gid,name,completed,due_on,assignee,notes,projects,tags}
+  create_task: params={name(REQUIRED),project_id(REQUIRED),notes?,due_on?,assignee?} → output:{task_id,name}
+    due_on: "YYYY-MM-DD" format
+  update_task: params={task_id(REQUIRED),name?,notes?,due_on?,assignee?} → output:{task_id,name}
+  complete_task: params={task_id(REQUIRED)} → output:{task_id,completed:true}
+
+TYPEFORM (provider: typeform):
+  list_forms: params={page_size?,search?} → output:{forms:[{id,title,last_updated_at,self_link}],total_items}
+  get_form: params={form_id(REQUIRED)} → output:{id,title,fields:[{id,title,type}],settings}
+  get_responses: params={form_id(REQUIRED),page_size?,since?,until?,completed?} → output:{responses:[{response_id,submitted_at,answers:{field_ref:value}}],total_items}
+    since/until: ISO8601 datetime strings
+
+OUTLOOK (provider: outlook):
+  list_emails: params={folder:"inbox",max_results?,filter?} → output:{emails:[{id,subject,from,received_at,is_read,preview}]}
+    folder: "inbox", "sentitems", "drafts", "deleteditems", or a folder ID
+    filter: OData filter e.g. "isRead eq false"
+  read_email: params={message_id(REQUIRED)} → output:{id,subject,from,to,cc,received_at,body,body_type,is_read}
+  send_email: params={to(REQUIRED),subject(REQUIRED),body?,body_type:"Text|HTML",cc?} → output:{sent:true,subject}
+  reply_email: params={message_id(REQUIRED),body?} → output:{replied:true,message_id}
+  list_folders: params={} → output:{folders:[{id,name,total_items,unread_items}]}
+  move_email: params={message_id(REQUIRED),destination_folder(REQUIRED)} → output:{message_id,moved:true}
+    destination_folder: folder ID or well-known name e.g. "archive", "deleteditems"
+
 COMPLETE EXAMPLE — 3-node program (cron → fetch emails → send Slack summary):
 {
   "version":"1.0","program_id":"__GENERATED__","program_name":"Daily Email Digest to Slack",

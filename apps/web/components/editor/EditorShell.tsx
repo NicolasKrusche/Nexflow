@@ -179,6 +179,7 @@ function makeDefaultNode(variant: NodeVariant, id: string, position: { x: number
     connection: null, // user picks in sidebar
     position, status: "idle",
     config: {
+      provider: variant.subtype,
       scope_access: "read",
       scope_required: [],
     },
@@ -598,11 +599,12 @@ export function EditorShell({
       const schemaNode = makeDefaultNode(variant, id, position);
 
       dispatch({ type: "UPDATE_NODE", nodeId: id, patch: schemaNode });
+      dispatch({ type: "SELECT_NODE", nodeId: id });
 
       skipSyncRef.current = true;
       const rfNode: ReactFlowNode = {
         id,
-        type,
+        type: schemaNode.type,
         position,
         data: {
           label: schemaNode.label,
