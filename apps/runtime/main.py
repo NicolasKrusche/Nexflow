@@ -63,16 +63,26 @@ async def trigger_workflow(workflow_id: str) -> None:
     run_id = run_result.data[0]["id"]
     user_id = program_data.get("user_id", "")
     final_status = "failed"
-    executor = ProgramExecutor(schema, run_id, user_id)
+    error_message: str | None = None
+    executor: ProgramExecutor | None = None
     try:
+        executor = ProgramExecutor(schema, run_id, user_id)
         await executor.execute(None)
         final_status = "completed"
-        await update_run(db, run_id, status="completed", completed_at="now()")
     except ExecutionError as e:
-        await update_run(db, run_id, status="failed", error_message=e.message, completed_at="now()")
+        error_message = e.message
     except Exception as e:
-        await update_run(db, run_id, status="failed", error_message=str(e), completed_at="now()")
+        error_message = str(e)
     finally:
+        telemetry = executor.run_telemetry_payload() if executor else {}
+        await update_run(
+            db,
+            run_id,
+            status=final_status,
+            error_message=error_message,
+            completed_at="now()",
+            **telemetry,
+        )
         await release_run_locks(db, run_id)
         await _notify_complete(run_id, workflow_id, user_id, final_status)
 
@@ -168,26 +178,26 @@ async def _run_program(
 ) -> None:
     db = get_db()
     final_status = "failed"
+    error_message: str | None = None
+    executor = ProgramExecutor(schema, run_id, user_id, connection_name_to_id=connection_name_to_id)
     try:
-        executor = ProgramExecutor(schema, run_id, user_id, connection_name_to_id=connection_name_to_id)
         await asyncio.wait_for(executor.execute(trigger_payload), timeout=RUN_TIMEOUT_SECONDS)
         final_status = "completed"
-        await update_run(db, run_id, status="completed", completed_at="now()")
     except asyncio.TimeoutError:
-        await update_run(
-            db, run_id, status="failed",
-            error_message=f"Run exceeded maximum execution time ({RUN_TIMEOUT_SECONDS}s)",
-            completed_at="now()",
-        )
+        error_message = f"Run exceeded maximum execution time ({RUN_TIMEOUT_SECONDS}s)"
     except ExecutionError as e:
-        await update_run(
-            db, run_id, status="failed", error_message=e.message, completed_at="now()"
-        )
+        error_message = e.message
     except Exception as e:
-        await update_run(
-            db, run_id, status="failed", error_message=str(e), completed_at="now()"
-        )
+        error_message = str(e)
     finally:
+        await update_run(
+            db,
+            run_id,
+            status=final_status,
+            error_message=error_message,
+            completed_at="now()",
+            **executor.run_telemetry_payload(),
+        )
         await release_run_locks(db, run_id)
         # Notify Next.js — fires inter-program triggers for completed runs
         await _notify_complete(run_id, schema.program_id, user_id, final_status)

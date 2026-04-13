@@ -205,6 +205,12 @@ export interface Database {
           started_at: string | null;
           completed_at: string | null;
           error_message: string | null;
+          prompt_tokens: number;
+          completion_tokens: number;
+          total_tokens: number;
+          estimated_cost_usd: number;
+          connector_api_calls: number;
+          model_call_count: number;
           created_at: string;
         };
         Insert: {
@@ -216,6 +222,12 @@ export interface Database {
           started_at?: string | null;
           completed_at?: string | null;
           error_message?: string | null;
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          total_tokens?: number;
+          estimated_cost_usd?: number;
+          connector_api_calls?: number;
+          model_call_count?: number;
           created_at?: string;
         };
         Update: {
@@ -227,6 +239,12 @@ export interface Database {
           started_at?: string | null;
           completed_at?: string | null;
           error_message?: string | null;
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          total_tokens?: number;
+          estimated_cost_usd?: number;
+          connector_api_calls?: number;
+          model_call_count?: number;
           created_at?: string;
         };
       };
@@ -249,6 +267,12 @@ export interface Database {
           retry_count: number;
           started_at: string | null;
           completed_at: string | null;
+          prompt_tokens: number;
+          completion_tokens: number;
+          total_tokens: number;
+          estimated_cost_usd: number;
+          connector_api_calls: number;
+          model_call_count: number;
           created_at: string;
         };
         Insert: {
@@ -269,6 +293,12 @@ export interface Database {
           retry_count?: number;
           started_at?: string | null;
           completed_at?: string | null;
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          total_tokens?: number;
+          estimated_cost_usd?: number;
+          connector_api_calls?: number;
+          model_call_count?: number;
           created_at?: string;
         };
         Update: {
@@ -289,6 +319,12 @@ export interface Database {
           retry_count?: number;
           started_at?: string | null;
           completed_at?: string | null;
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          total_tokens?: number;
+          estimated_cost_usd?: number;
+          connector_api_calls?: number;
+          model_call_count?: number;
           created_at?: string;
         };
       };

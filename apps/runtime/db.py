@@ -4,6 +4,15 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, Optional
 from supabase import create_client, Client
 
+TELEMETRY_COLUMNS = {
+    "prompt_tokens",
+    "completion_tokens",
+    "total_tokens",
+    "estimated_cost_usd",
+    "connector_api_calls",
+    "model_call_count",
+}
+
 
 def get_db() -> Client:
     url = os.environ["SUPABASE_URL"]
@@ -39,6 +48,16 @@ async def create_run(
 
 async def update_run(db: Client, run_id: str, **kwargs: Any) -> None:
     result = db.table("runs").update(kwargs).eq("id", run_id).execute()
+    if hasattr(result, "error") and result.error and any(k in TELEMETRY_COLUMNS for k in kwargs):
+        fallback = {k: v for k, v in kwargs.items() if k not in TELEMETRY_COLUMNS}
+        if fallback and fallback != kwargs:
+            retry = db.table("runs").update(fallback).eq("id", run_id).execute()
+            if not (hasattr(retry, "error") and retry.error):
+                print(
+                    f"[db] WARNING: update_run telemetry skipped for run {run_id} (likely missing migration)",
+                    flush=True,
+                )
+                return
     if hasattr(result, "error") and result.error:
         print(f"[db] WARNING: update_run failed for run {run_id}: {result.error}", flush=True)
 
@@ -82,6 +101,22 @@ async def update_node_execution(
         .eq("node_id", node_id)
         .execute()
     )
+    if hasattr(result, "error") and result.error and any(k in TELEMETRY_COLUMNS for k in kwargs):
+        fallback = {k: v for k, v in kwargs.items() if k not in TELEMETRY_COLUMNS}
+        if fallback and fallback != kwargs:
+            retry = (
+                db.table("node_executions")
+                .update(fallback)
+                .eq("run_id", run_id)
+                .eq("node_id", node_id)
+                .execute()
+            )
+            if not (hasattr(retry, "error") and retry.error):
+                print(
+                    f"[db] WARNING: update_node_execution telemetry skipped (run={run_id}, node={node_id})",
+                    flush=True,
+                )
+                return
     if hasattr(result, "error") and result.error:
         print(f"[db] WARNING: update_node_execution failed (run={run_id}, node={node_id}): {result.error}", flush=True)
 

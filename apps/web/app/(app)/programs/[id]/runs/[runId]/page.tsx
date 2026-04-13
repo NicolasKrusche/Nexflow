@@ -16,6 +16,12 @@ type RunRow = {
   started_at: string | null;
   completed_at: string | null;
   error_message: string | null;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  estimated_cost_usd: number;
+  connector_api_calls: number;
+  model_call_count: number;
   created_at: string;
 };
 
@@ -29,6 +35,12 @@ type NodeExecutionRow = {
   retry_count: number | null;
   started_at: string | null;
   completed_at: string | null;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  estimated_cost_usd: number;
+  connector_api_calls: number;
+  model_call_count: number;
   created_at: string;
 };
 
@@ -47,6 +59,19 @@ function formatDuration(start: string | null, end: string | null): string {
 function formatDateTime(iso: string | null): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleString();
+}
+
+function formatInteger(value: number): string {
+  return new Intl.NumberFormat().format(value);
+}
+
+function formatUsd(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 6,
+  }).format(value);
 }
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
@@ -93,7 +118,7 @@ export default async function RunLogPage({
   const { data: runRaw, error: runError } = await serviceClient
     .from("runs")
     .select(
-      "id, program_id, status, triggered_by, trigger_payload, started_at, completed_at, error_message, created_at"
+      "id, program_id, status, triggered_by, trigger_payload, started_at, completed_at, error_message, prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd, connector_api_calls, model_call_count, created_at"
     )
     .eq("id", params.runId)
     .single();
@@ -124,7 +149,7 @@ export default async function RunLogPage({
   const { data: execsRaw } = await serviceClient
     .from("node_executions")
     .select(
-      "id, node_id, status, input_payload, output_payload, error_message, retry_count, started_at, completed_at, created_at"
+      "id, node_id, status, input_payload, output_payload, error_message, retry_count, started_at, completed_at, prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd, connector_api_calls, model_call_count, created_at"
     )
     .eq("run_id", params.runId)
     .order("created_at", { ascending: true });
@@ -187,6 +212,24 @@ export default async function RunLogPage({
           <p className="mt-0.5">
             {formatDuration(run.started_at, run.completed_at)}
           </p>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Token usage</span>
+          <p className="mt-0.5">
+            {formatInteger(run.total_tokens)} total ({formatInteger(run.prompt_tokens)} in / {formatInteger(run.completion_tokens)} out)
+          </p>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Estimated model cost</span>
+          <p className="mt-0.5">{formatUsd(run.estimated_cost_usd)}</p>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Model calls</span>
+          <p className="mt-0.5">{formatInteger(run.model_call_count)}</p>
+        </div>
+        <div>
+          <span className="text-muted-foreground">Connector API calls</span>
+          <p className="mt-0.5">{formatInteger(run.connector_api_calls)}</p>
         </div>
         {run.error_message && (
           <div className="col-span-2">

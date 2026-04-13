@@ -33,10 +33,122 @@ from db import (
     get_db,
     get_existing_lock,
     get_run_status,
-    release_run_locks,
     update_node_execution,
-    update_run,
 )
+
+TelemetryPayload = dict[str, int | float]
+
+# Best-effort price catalog used when the provider response does not include
+# explicit cost fields. Rates are USD per 1M tokens.
+MODEL_PRICING_USD_PER_MTOK: dict[str, tuple[float, float]] = {
+    # OpenAI
+    "gpt-4.1": (2.00, 8.00),
+    "gpt-4.1-mini": (0.40, 1.60),
+    "gpt-4o": (5.00, 15.00),
+    "gpt-4o-mini": (0.15, 0.60),
+    "gpt-4-turbo": (10.00, 30.00),
+    "gpt-4": (30.00, 60.00),
+    "gpt-3.5-turbo": (0.50, 1.50),
+    # Anthropic
+    "claude-opus-4": (15.00, 75.00),
+    "claude-opus-4-5": (15.00, 75.00),
+    "claude-sonnet-4": (3.00, 15.00),
+    "claude-3-7-sonnet": (3.00, 15.00),
+    "claude-3-5-sonnet": (3.00, 15.00),
+    "claude-3-5-haiku": (0.80, 4.00),
+    "claude-3-haiku": (0.25, 1.25),
+    # Google
+    "gemini-2.5-pro": (1.25, 5.00),
+    "gemini-2.5-flash": (0.30, 2.50),
+    "gemini-1.5-pro": (3.50, 10.50),
+    "gemini-1.5-flash": (0.35, 1.05),
+}
+
+
+def _empty_telemetry() -> TelemetryPayload:
+    return {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "estimated_cost_usd": 0.0,
+        "connector_api_calls": 0,
+        "model_call_count": 0,
+    }
+
+
+def _non_negative_int(value: Any) -> int:
+    try:
+        num = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, num)
+
+
+def _non_negative_float(value: Any) -> float:
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, num)
+
+
+def _round_cost(cost: float) -> float:
+    return round(max(0.0, cost), 6)
+
+
+def _extract_usage_tokens(payload: dict[str, Any]) -> tuple[int, int, int]:
+    usage = payload.get("usage")
+    if not isinstance(usage, dict):
+        return (0, 0, 0)
+
+    prompt_tokens = _non_negative_int(
+        usage.get("prompt_tokens", usage.get("input_tokens", 0))
+    )
+    completion_tokens = _non_negative_int(
+        usage.get("completion_tokens", usage.get("output_tokens", 0))
+    )
+    total_tokens = _non_negative_int(usage.get("total_tokens", 0))
+
+    if total_tokens == 0:
+        total_tokens = prompt_tokens + completion_tokens
+    if completion_tokens == 0 and total_tokens > prompt_tokens:
+        completion_tokens = total_tokens - prompt_tokens
+
+    return (prompt_tokens, completion_tokens, total_tokens)
+
+
+def _extract_reported_cost_usd(payload: dict[str, Any]) -> float | None:
+    usage = payload.get("usage")
+    if not isinstance(usage, dict):
+        return None
+
+    for key in ("cost", "total_cost", "estimated_cost", "estimated_cost_usd"):
+        if key in usage:
+            cost = _non_negative_float(usage.get(key))
+            return _round_cost(cost)
+    return None
+
+
+def _pricing_for_model(model: str) -> tuple[float, float] | None:
+    needle = model.lower().strip()
+    if not needle:
+        return None
+
+    # Prefer longest match so "gpt-4.1-mini" resolves before "gpt-4.1".
+    for key in sorted(MODEL_PRICING_USD_PER_MTOK.keys(), key=len, reverse=True):
+        if key in needle:
+            return MODEL_PRICING_USD_PER_MTOK[key]
+    return None
+
+
+def _estimate_cost_usd(model: str, prompt_tokens: int, completion_tokens: int) -> float:
+    pricing = _pricing_for_model(model)
+    if pricing is None:
+        return 0.0
+    prompt_rate, completion_rate = pricing
+    prompt_cost = (max(0, prompt_tokens) / 1_000_000) * prompt_rate
+    completion_cost = (max(0, completion_tokens) / 1_000_000) * completion_rate
+    return _round_cost(prompt_cost + completion_cost)
 
 
 def _resolve_path(expr: str, data: Any) -> Any:
@@ -170,6 +282,92 @@ class ProgramExecutor:
             self.edges_from.setdefault(edge.from_node, []).append(edge)
         # Maps connection name → UUID. Populated from the run request; falls back to DB lookup.
         self._connection_name_to_id: dict[str, str] = dict(connection_name_to_id or {})
+        self._node_telemetry: dict[str, TelemetryPayload] = {
+            node.id: _empty_telemetry() for node in schema.nodes
+        }
+        self._run_telemetry: TelemetryPayload = _empty_telemetry()
+
+    def _record_telemetry(
+        self,
+        node_id: str,
+        *,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+        total_tokens: int = 0,
+        estimated_cost_usd: float = 0.0,
+        connector_api_calls: int = 0,
+        model_call_count: int = 0,
+    ) -> None:
+        if node_id not in self._node_telemetry:
+            self._node_telemetry[node_id] = _empty_telemetry()
+
+        node_metrics = self._node_telemetry[node_id]
+
+        pt = _non_negative_int(prompt_tokens)
+        ct = _non_negative_int(completion_tokens)
+        tt = _non_negative_int(total_tokens)
+        if tt == 0:
+            tt = pt + ct
+        cost = _non_negative_float(estimated_cost_usd)
+        connector_calls = _non_negative_int(connector_api_calls)
+        model_calls = _non_negative_int(model_call_count)
+
+        node_metrics["prompt_tokens"] += pt
+        node_metrics["completion_tokens"] += ct
+        node_metrics["total_tokens"] += tt
+        node_metrics["estimated_cost_usd"] += cost
+        node_metrics["connector_api_calls"] += connector_calls
+        node_metrics["model_call_count"] += model_calls
+
+        self._run_telemetry["prompt_tokens"] += pt
+        self._run_telemetry["completion_tokens"] += ct
+        self._run_telemetry["total_tokens"] += tt
+        self._run_telemetry["estimated_cost_usd"] += cost
+        self._run_telemetry["connector_api_calls"] += connector_calls
+        self._run_telemetry["model_call_count"] += model_calls
+
+    def _node_telemetry_payload(self, node_id: str) -> dict[str, int | float]:
+        metrics = self._node_telemetry.get(node_id, _empty_telemetry())
+        prompt_tokens = _non_negative_int(metrics.get("prompt_tokens", 0))
+        completion_tokens = _non_negative_int(metrics.get("completion_tokens", 0))
+        total_tokens = _non_negative_int(metrics.get("total_tokens", 0))
+        if total_tokens == 0:
+            total_tokens = prompt_tokens + completion_tokens
+        return {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+            "estimated_cost_usd": _round_cost(
+                _non_negative_float(metrics.get("estimated_cost_usd", 0.0))
+            ),
+            "connector_api_calls": _non_negative_int(
+                metrics.get("connector_api_calls", 0)
+            ),
+            "model_call_count": _non_negative_int(metrics.get("model_call_count", 0)),
+        }
+
+    def run_telemetry_payload(self) -> dict[str, int | float]:
+        prompt_tokens = _non_negative_int(self._run_telemetry.get("prompt_tokens", 0))
+        completion_tokens = _non_negative_int(
+            self._run_telemetry.get("completion_tokens", 0)
+        )
+        total_tokens = _non_negative_int(self._run_telemetry.get("total_tokens", 0))
+        if total_tokens == 0:
+            total_tokens = prompt_tokens + completion_tokens
+        return {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+            "estimated_cost_usd": _round_cost(
+                _non_negative_float(self._run_telemetry.get("estimated_cost_usd", 0.0))
+            ),
+            "connector_api_calls": _non_negative_int(
+                self._run_telemetry.get("connector_api_calls", 0)
+            ),
+            "model_call_count": _non_negative_int(
+                self._run_telemetry.get("model_call_count", 0)
+            ),
+        }
 
     async def execute(self, trigger_payload: dict | None = None) -> dict[str, Any]:
         """Run the program. Returns final state."""
@@ -201,6 +399,7 @@ class ProgramExecutor:
             started_at="now()",
             completed_at="now()",
             output_payload=state[trigger_node.id],
+            **self._node_telemetry_payload(trigger_node.id),
         )
 
         # Topological execution
@@ -267,6 +466,7 @@ class ProgramExecutor:
                         status="failed",
                         error_message=e.message,
                         completed_at="now()",
+                        **self._node_telemetry_payload(edge.to),
                     )
                     if target_node.type == "agent":
                         agent_cfg = target_node.config
@@ -384,6 +584,7 @@ class ProgramExecutor:
                     await update_node_execution(
                         self.db, self.run_id, nid,
                         status="failed", error_message=e.message, completed_at="now()",
+                        **self._node_telemetry_payload(nid),
                     )
                     out = {}
                 local_state[nid] = out
@@ -398,6 +599,7 @@ class ProgramExecutor:
                 status="completed",
                 completed_at="now()",
                 output_payload={"iterations": results, "count": len(items)},
+                **self._node_telemetry_payload(nid),
             )
 
         return body_ids
@@ -459,7 +661,12 @@ class ProgramExecutor:
             approved = await self._request_step_approval(node, input_data, "Manual step-through")
             if not approved:
                 await update_node_execution(
-                    self.db, self.run_id, node.id, status="skipped", completed_at="now()"
+                    self.db,
+                    self.run_id,
+                    node.id,
+                    status="skipped",
+                    completed_at="now()",
+                    **self._node_telemetry_payload(node.id),
                 )
                 return {}
 
@@ -472,6 +679,9 @@ class ProgramExecutor:
                 credentials = None
                 if api_key_ref and api_key_ref != "__USER_ASSIGNED__":
                     credentials = await get_credential(api_key_ref, self.user_id)
+                # Legacy agent.* nodes do not expose usage metadata here, so we
+                # at least track call volume.
+                self._record_telemetry(node.id, model_call_count=1)
                 output = await run_agent(
                     cfg.__dict__ if hasattr(cfg, "__dict__") else {},
                     input_data,
@@ -491,6 +701,7 @@ class ProgramExecutor:
                 status="completed",
                 completed_at="now()",
                 output_payload=output,
+                **self._node_telemetry_payload(node.id),
             )
             return output
         except ExecutionError:
@@ -508,7 +719,12 @@ class ProgramExecutor:
             approved = await self._request_step_approval(node, input_data, "Agent approval required")
             if not approved:
                 await update_node_execution(
-                    self.db, self.run_id, node.id, status="skipped", completed_at="now()"
+                    self.db,
+                    self.run_id,
+                    node.id,
+                    status="skipped",
+                    completed_at="now()",
+                    **self._node_telemetry_payload(node.id),
                 )
                 return {}
 
@@ -517,12 +733,19 @@ class ProgramExecutor:
 
         # Execute with retry
         return await self._with_retry(
-            lambda: self._call_llm(cfg, api_key, provider, input_data),
+            lambda: self._call_llm(cfg, api_key, provider, input_data, node.id),
             cfg.retry,
             node.id,
         )
 
-    async def _call_llm(self, cfg: AgentConfig, api_key: str, provider: str, input_data: dict) -> dict:
+    async def _call_llm(
+        self,
+        cfg: AgentConfig,
+        api_key: str,
+        provider: str,
+        input_data: dict,
+        node_id: str,
+    ) -> dict:
         """Call the LLM via LiteLLM-compatible API."""
         if not api_key:
             raise ExecutionError("API_KEY_MISSING", f"No API key available for provider '{provider}' — check your key configuration")
@@ -553,7 +776,10 @@ class ProgramExecutor:
             "Content-Type": "application/json",
         }
 
+        self._record_telemetry(node_id, model_call_count=1)
+
         content: str
+        data: dict[str, Any]
         if "anthropic" in base_url and (litellm_url is None or "litellm" not in base_url):
             # Anthropic uses x-api-key, not Bearer
             headers.pop("Authorization", None)
@@ -622,6 +848,21 @@ class ProgramExecutor:
                 content = message.get("content") or ""
                 if content is None:
                     raise Exception(f"LLM message.content is null (model={cfg.model}). Full response: {resp.text[:500]}")
+
+        prompt_tokens, completion_tokens, total_tokens = _extract_usage_tokens(data)
+        reported_cost = _extract_reported_cost_usd(data)
+        estimated_cost_usd = (
+            reported_cost
+            if reported_cost is not None
+            else _estimate_cost_usd(cfg.model, prompt_tokens, completion_tokens)
+        )
+        self._record_telemetry(
+            node_id,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            estimated_cost_usd=estimated_cost_usd,
+        )
 
         # Try to parse as JSON, else wrap in text field
         try:
@@ -754,7 +995,7 @@ class ProgramExecutor:
                 fail_program_on_exhaust=False,
             )
             return await self._with_retry(
-                lambda: self._execute_http_connection(cfg, input_data),
+                lambda: self._execute_http_connection(cfg, input_data, node.id),
                 retry_cfg,
                 node.id,
             )
@@ -802,6 +1043,7 @@ class ProgramExecutor:
                         resolved_params[k] = v
 
                 try:
+                    self._record_telemetry(node.id, connector_api_calls=1)
                     result = await connector.execute(
                         cfg.operation,
                         resolved_params,
@@ -817,6 +1059,7 @@ class ProgramExecutor:
                         )
                         try:
                             access_token = await self._fetch_oauth_token(connection_id, force_refresh=True)
+                            self._record_telemetry(node.id, connector_api_calls=1)
                             result = await connector.execute(cfg.operation, resolved_params, access_token)
                         except ConnectorError as retry_exc:
                             provider = self._provider_for_connection(connection_id)
@@ -842,6 +1085,7 @@ class ProgramExecutor:
         self,
         cfg: HttpConnectionConfig,
         input_data: dict,
+        node_id: str,
     ) -> dict:
         if not cfg.url.strip():
             raise ExecutionError("HTTP_CONFIG_INVALID", "HTTP connector URL is required")
@@ -903,6 +1147,7 @@ class ProgramExecutor:
             request_body = {"json": input_data}
 
         async with httpx.AsyncClient(timeout=timeout_seconds) as client:
+            self._record_telemetry(node_id, connector_api_calls=1)
             response = await client.request(
                 method=method,
                 url=cfg.url,
@@ -1265,7 +1510,7 @@ class ProgramExecutor:
         fn: Callable,
         retry: Any,
         node_id: str,
-    ) -> dict:
+    ) -> Any:
         last_error: Exception | None = None
         for attempt in range(1, retry.max_attempts + 1):
             try:
@@ -1287,6 +1532,7 @@ class ProgramExecutor:
                     node_id,
                     retry_count=attempt,
                     error_message=error_msg,
+                    **self._node_telemetry_payload(node_id),
                 )
                 if attempt == retry.max_attempts or is_client_error:
                     break
@@ -1310,6 +1556,7 @@ class ProgramExecutor:
             status="failed",
             error_message=f"[Retries exhausted — continuing run] {err_msg}",
             completed_at="now()",
+            **self._node_telemetry_payload(node_id),
         )
         return {}
 

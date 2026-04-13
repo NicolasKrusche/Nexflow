@@ -16,6 +16,12 @@ type NodeExecutionRow = {
   retry_count: number | null;
   started_at: string | null;
   completed_at: string | null;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  estimated_cost_usd: number;
+  connector_api_calls: number;
+  model_call_count: number;
   created_at: string;
 };
 
@@ -29,6 +35,19 @@ function formatDuration(start: string | null, end: string | null): string {
   if (diff < 1000) return `${diff}ms`;
   if (diff < 60000) return `${(diff / 1000).toFixed(1)}s`;
   return `${Math.floor(diff / 60000)}m ${Math.floor((diff % 60000) / 1000)}s`;
+}
+
+function formatInteger(value: number): string {
+  return new Intl.NumberFormat().format(value);
+}
+
+function formatUsd(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 6,
+  }).format(value);
 }
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
@@ -141,7 +160,7 @@ export function RunLogLive({
   const fetchExecs = async () => {
     const { data } = await supabase
       .from("node_executions")
-      .select("id, node_id, status, input_payload, output_payload, error_message, retry_count, started_at, completed_at, created_at")
+      .select("id, node_id, status, input_payload, output_payload, error_message, retry_count, started_at, completed_at, prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd, connector_api_calls, model_call_count, created_at")
       .eq("run_id", runId)
       .order("created_at", { ascending: true });
     if (data && data.length > 0) setExecs(data as NodeExecutionRow[]);
@@ -261,6 +280,25 @@ export function RunLogLive({
                 )}
 
                 {/* Error — full detail, never truncated */}
+                {(exec.total_tokens > 0 || exec.connector_api_calls > 0 || exec.model_call_count > 0) && (
+                  <div className="text-xs text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
+                    {exec.total_tokens > 0 && (
+                      <span>
+                        tokens: {formatInteger(exec.total_tokens)} ({formatInteger(exec.prompt_tokens)} in / {formatInteger(exec.completion_tokens)} out)
+                      </span>
+                    )}
+                    {exec.model_call_count > 0 && (
+                      <span>model calls: {formatInteger(exec.model_call_count)}</span>
+                    )}
+                    {exec.connector_api_calls > 0 && (
+                      <span>connector API calls: {formatInteger(exec.connector_api_calls)}</span>
+                    )}
+                    {exec.estimated_cost_usd > 0 && (
+                      <span>estimated cost: {formatUsd(exec.estimated_cost_usd)}</span>
+                    )}
+                  </div>
+                )}
+
                 {exec.error_message && <ErrorBlock message={exec.error_message} />}
 
                 {/* Input / Output — open by default when failed so context is immediate */}
