@@ -5,17 +5,21 @@ import { createServerClient } from "@/lib/supabase/server";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+// fix: optional fields may be absent if migration 20240003 (phase4) not yet applied
 type TriggerRow = {
   id: string;
   program_id: string;
   type: string;
   config: Record<string, unknown>;
   is_active: boolean;
-  webhook_token: string | null;
-  next_run_at: string | null;
-  last_fired_at: string | null;
+  webhook_token?: string | null;
+  next_run_at?: string | null;
+  last_fired_at?: string | null;
   created_at: string;
 };
+
+const BASE_TRIGGER_COLS = "id, program_id, type, config, is_active, created_at";
+const ENRICHED_TRIGGER_COLS = "id, program_id, type, config, is_active, webhook_token, next_run_at, last_fired_at, created_at";
 
 // ─── GET /api/programs/[id]/triggers ─────────────────────────────────────────
 
@@ -37,13 +41,27 @@ export async function GET(
   if (progError || !program) return apiError("Program not found", 404);
 
   const serviceClient = createServiceClient();
-  const { data, error } = await serviceClient
-    .from("triggers")
-    .select("id, program_id, type, config, is_active, webhook_token, next_run_at, last_fired_at, created_at")
-    .eq("program_id", params.id)
-    .order("created_at", { ascending: false });
 
-  if (error) return apiError(error.message, 500);
+  // fix: fall back to base columns if phase4 migration not applied (webhook_token/next_run_at/last_fired_at)
+  let data: unknown[] | null = null;
+  {
+    const enriched = await serviceClient
+      .from("triggers")
+      .select(ENRICHED_TRIGGER_COLS)
+      .eq("program_id", params.id)
+      .order("created_at", { ascending: false });
+    if (!enriched.error) {
+      data = enriched.data;
+    } else {
+      const fallback = await serviceClient
+        .from("triggers")
+        .select(BASE_TRIGGER_COLS)
+        .eq("program_id", params.id)
+        .order("created_at", { ascending: false });
+      if (fallback.error) return apiError(fallback.error.message, 500);
+      data = fallback.data;
+    }
+  }
 
   const triggers = (data ?? []) as unknown as TriggerRow[];
 
@@ -112,21 +130,41 @@ export async function POST(
   }
 
   const serviceClient = createServiceClient();
-  const { data, error } = await serviceClient
-    .from("triggers")
-    .insert({
-      program_id: params.id,
-      type,
-      config,
-      is_active: true,
-      next_run_at: nextRunAt,
-    } as never)
-    .select("id, program_id, type, config, is_active, webhook_token, next_run_at, last_fired_at, created_at")
-    .single();
 
-  if (error || !data) return apiError("Failed to create trigger", 500);
+  // fix: only include next_run_at when set (cron) to avoid insert failures if column absent in envs missing migration 20240003
+  const insertPayload: Record<string, unknown> = {
+    program_id: params.id,
+    type,
+    config,
+    is_active: true,
+  };
+  if (nextRunAt) insertPayload.next_run_at = nextRunAt;
 
-  const trigger = data as unknown as TriggerRow;
+  // fix: try enriched SELECT first; fall back to base columns if phase4 migration not applied; surface DB error for debugging
+  let trigger: TriggerRow | null = null;
+  {
+    const enriched = await serviceClient
+      .from("triggers")
+      .insert(insertPayload as never)
+      .select(ENRICHED_TRIGGER_COLS)
+      .single();
+    if (!enriched.error && enriched.data) {
+      trigger = enriched.data as unknown as TriggerRow;
+    } else {
+      // Retry with base columns — row may have already inserted on previous attempt? No: PostgREST INSERT+SELECT is one statement.
+      const fallback = await serviceClient
+        .from("triggers")
+        .insert(insertPayload as never)
+        .select(BASE_TRIGGER_COLS)
+        .single();
+      if (fallback.error || !fallback.data) {
+        const msg = fallback.error?.message ?? enriched.error?.message ?? "unknown DB error";
+        console.error("[/api/programs/[id]/triggers] insert failed:", msg);
+        return apiError(`Failed to create trigger: ${msg}`, 500);
+      }
+      trigger = fallback.data as unknown as TriggerRow;
+    }
+  }
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
   return NextResponse.json(

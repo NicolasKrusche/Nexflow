@@ -26,14 +26,9 @@ export async function PATCH(
 
   const serviceClient = createServiceClient();
 
-  // Build update payload
-  type UpdatePayload = {
-    is_active?: boolean;
-    config?: Record<string, unknown>;
-    next_run_at?: string | null;
-    updated_at: string;
-  };
-  const updates: UpdatePayload = { updated_at: new Date().toISOString() };
+  // fix: build update payload with only fields guaranteed to exist without migration 20240003
+  const updates: Record<string, unknown> = {};
+  const enrichedUpdates: Record<string, unknown> = {}; // fields that require phase4 migration
 
   if (typeof body.is_active === "boolean") {
     updates.is_active = body.is_active;
@@ -47,24 +42,46 @@ export async function PATCH(
       try {
         const timezone = ((body.config as Record<string, unknown>).timezone as string) ?? "UTC";
         const interval = CronExpressionParser.parse(expr, { tz: timezone });
-        updates.next_run_at = interval.next().toISOString();
+        enrichedUpdates.next_run_at = interval.next().toISOString();
       } catch {
         return apiError("Invalid cron expression", 400);
       }
     }
   }
 
-  const { data, error } = await serviceClient
+  // fix: attempt full update (with updated_at / next_run_at); on schema-cache failure, retry without enriched cols
+  const BASE_COLS = "id, type, config, is_active, created_at";
+  const ENRICHED_COLS = "id, type, config, is_active, next_run_at, last_fired_at, updated_at, created_at";
+
+  const fullPayload = { ...updates, ...enrichedUpdates, updated_at: new Date().toISOString() };
+
+  const enriched = await serviceClient
+    .from("triggers")
+    .update(fullPayload as never)
+    .eq("id", params.triggerId)
+    .eq("program_id", params.id)
+    .select(ENRICHED_COLS)
+    .single();
+
+  if (!enriched.error && enriched.data) {
+    return NextResponse.json({ trigger: enriched.data });
+  }
+
+  const fallback = await serviceClient
     .from("triggers")
     .update(updates as never)
     .eq("id", params.triggerId)
     .eq("program_id", params.id)
-    .select("id, type, config, is_active, next_run_at, last_fired_at, updated_at")
+    .select(BASE_COLS)
     .single();
 
-  if (error || !data) return apiError("Trigger not found or update failed", 404);
+  if (fallback.error || !fallback.data) {
+    const msg = fallback.error?.message ?? enriched.error?.message ?? "Trigger not found or update failed";
+    console.error("[/api/programs/[id]/triggers/[triggerId]] update failed:", msg);
+    return apiError(msg, 404);
+  }
 
-  return NextResponse.json({ trigger: data });
+  return NextResponse.json({ trigger: fallback.data });
 }
 
 // ─── DELETE /api/programs/[id]/triggers/[triggerId] ───────────────────────────

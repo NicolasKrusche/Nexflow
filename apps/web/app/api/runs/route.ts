@@ -72,25 +72,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Pre-flight checks failed", checks }, { status: 422 });
   }
 
-  // Insert run row
-  type RunRow = {
-    id: string;
-    program_id: string;
-    status: string;
-    triggered_by: string;
-    started_at: string | null;
-    completed_at: string | null;
-    error_message: string | null;
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-    estimated_cost_usd: number;
-    connector_api_calls: number;
-    model_call_count: number;
-    created_at: string;
-  };
-
-  // fix: surface DB error message so silent "Failed to create run" failures are debuggable
+  // fix: select only id to tolerate envs where migration 20240006 (telemetry columns) not yet applied
   const { data: runRaw, error: runError } = await serviceClient
     .from("runs")
     .insert({
@@ -99,7 +81,7 @@ export async function POST(request: Request) {
       status: "running",
       started_at: new Date().toISOString(),
     } as unknown as never)
-    .select("id, program_id, status, triggered_by, started_at, completed_at, error_message, prompt_tokens, completion_tokens, total_tokens, estimated_cost_usd, connector_api_calls, model_call_count, created_at")
+    .select("id")
     .single();
 
   if (runError || !runRaw) {
@@ -107,7 +89,7 @@ export async function POST(request: Request) {
     return apiError(`Failed to create run${runError?.message ? `: ${runError.message}` : ""}`, 500);
   }
 
-  const run = runRaw as unknown as RunRow;
+  const run = runRaw as unknown as { id: string };
 
   // Dispatch to Python runtime — if it rejects or is unreachable, fail the run immediately
   const runtimeUrl = process.env.RUNTIME_URL ?? "http://localhost:8000";
