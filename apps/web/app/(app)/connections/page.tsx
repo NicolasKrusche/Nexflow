@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 type Connection = {
   id: string;
@@ -19,23 +18,21 @@ type Connection = {
 };
 
 const PROVIDER_LABELS: Record<string, string> = {
-  gmail: "Gmail",
-  sheets: "Google Sheets",
-  slack: "Slack",
-  notion: "Notion",
+  gmail:    "Gmail",
+  sheets:   "Google Sheets",
+  slack:    "Slack",
+  notion:   "Notion",
   calendar: "Google Calendar",
   airtable: "Airtable",
-  hubspot: "HubSpot",
-  docs: "Google Docs",
-  github: "GitHub",
+  hubspot:  "HubSpot",
+  docs:     "Google Docs",
+  github:   "GitHub",
   typeform: "Typeform",
-  asana: "Asana",
-  drive: "Google Drive",
-  outlook: "Outlook Mail",
+  asana:    "Asana",
+  drive:    "Google Drive",
+  outlook:  "Outlook Mail",
 };
 
-// Wikimedia Commons SVGs via Special:FilePath (302 → upload.wikimedia.org, no hash needed)
-// Falls back to Google favicon API for brands without a clean Wikimedia file
 const PROVIDER_ICON_URL: Record<string, string> = {
   gmail:    "https://commons.wikimedia.org/wiki/Special:FilePath/Gmail_icon_(2020).svg",
   sheets:   "https://upload.wikimedia.org/wikipedia/commons/a/ae/Google_Sheets_2020_Logo.svg",
@@ -45,7 +42,6 @@ const PROVIDER_ICON_URL: Record<string, string> = {
   slack:    "https://commons.wikimedia.org/wiki/Special:FilePath/Slack_icon_2019.svg",
   github:   "https://commons.wikimedia.org/wiki/Special:FilePath/GitHub_Invertocat_Logo.svg",
   outlook:  "https://upload.wikimedia.org/wikipedia/commons/4/45/Microsoft_Office_Outlook_%282018%E2%80%932024%29.svg",
-  // Favicon API for brands without reliable Wikimedia SVGs
   notion:   "https://www.google.com/s2/favicons?domain=notion.so&sz=64",
   airtable: "https://www.google.com/s2/favicons?domain=airtable.com&sz=64",
   hubspot:  "https://upload.wikimedia.org/wikipedia/commons/3/3f/HubSpot_Logo.svg",
@@ -53,7 +49,7 @@ const PROVIDER_ICON_URL: Record<string, string> = {
   asana:    "https://www.google.com/s2/favicons?domain=app.asana.com&sz=64",
 };
 
-function ProviderLogo({ provider, size = 28 }: { provider: string; size?: number }) {
+function ProviderLogo({ provider, size = 26 }: { provider: string; size?: number }) {
   const [failed, setFailed] = useState(false);
   const iconUrl = PROVIDER_ICON_URL[provider] ?? null;
 
@@ -70,7 +66,7 @@ function ProviderLogo({ provider, size = 28 }: { provider: string; size?: number
   return (
     <div
       style={{ width: size, height: size }}
-      className="rounded-md bg-white border border-border flex items-center justify-center shrink-0 overflow-hidden p-0.5"
+      className="rounded-md bg-white border border-border/50 flex items-center justify-center shrink-0 overflow-hidden p-0.5"
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -94,27 +90,25 @@ type Provider = {
 };
 
 const AVAILABLE_PROVIDERS: Provider[] = [
-  // Wave 1
-  { id: "gmail",    label: "Gmail",           description: "Send and read emails",                  wave: 1, href: "/api/connections/oauth/gmail?label=gmail:primary" },
-  { id: "sheets",   label: "Google Sheets",   description: "Read and write spreadsheet data",       wave: 1, href: "/api/connections/oauth/google?service=sheets&label=sheets:primary" },
-  { id: "slack",    label: "Slack",           description: "Post messages and read channels",       wave: 1, href: "/api/connections/oauth/slack?label=slack:primary" },
-  { id: "notion",   label: "Notion",          description: "Read and write pages and databases",    wave: 1, href: "/api/connections/oauth/notion?label=notion:primary" },
-  { id: "calendar", label: "Google Calendar", description: "Read and create calendar events",       wave: 1, href: "/api/connections/oauth/google?service=calendar&label=calendar:primary" },
-  { id: "airtable", label: "Airtable",        description: "Read and write Airtable bases",         wave: 1, href: "/api/connections/oauth/airtable?label=airtable:primary" },
-  { id: "hubspot",  label: "HubSpot",         description: "Manage contacts, deals, and content",   wave: 1, href: "/api/connections/oauth/hubspot?label=hubspot:primary" },
-  { id: "docs",     label: "Google Docs",     description: "Read and write documents",              wave: 1, href: "/api/connections/oauth/google?service=docs&label=docs:primary" },
-  // Wave 2
-  { id: "github",   label: "GitHub",          description: "Create issues, PRs, and read repos",   wave: 2, href: "/api/connections/oauth/github?label=github:primary" },
-  { id: "typeform", label: "Typeform",        description: "Read form responses and definitions",   wave: 2, href: "/api/connections/oauth/typeform?label=typeform:primary" },
-  { id: "asana",    label: "Asana",           description: "Manage tasks and projects",             wave: 2, href: "/api/connections/oauth/asana?label=asana:primary" },
-  { id: "drive",    label: "Google Drive",    description: "Read and manage Drive files",           wave: 2, href: "/api/connections/oauth/google?service=drive&label=drive:primary" },
-  { id: "outlook",  label: "Outlook Mail",    description: "Send and read Outlook email",           wave: 2, href: "/api/connections/oauth/outlook?label=outlook:primary" },
+  { id: "gmail",    label: "Gmail",           description: "Send and read emails",               wave: 1, href: "/api/connections/oauth/gmail?label=gmail:primary" },
+  { id: "sheets",   label: "Google Sheets",   description: "Read and write spreadsheet data",    wave: 1, href: "/api/connections/oauth/google?service=sheets&label=sheets:primary" },
+  { id: "slack",    label: "Slack",           description: "Post messages and read channels",    wave: 1, href: "/api/connections/oauth/slack?label=slack:primary" },
+  { id: "notion",   label: "Notion",          description: "Read and write pages and databases", wave: 1, href: "/api/connections/oauth/notion?label=notion:primary" },
+  { id: "calendar", label: "Google Calendar", description: "Read and create calendar events",    wave: 1, href: "/api/connections/oauth/google?service=calendar&label=calendar:primary" },
+  { id: "airtable", label: "Airtable",        description: "Read and write Airtable bases",      wave: 1, href: "/api/connections/oauth/airtable?label=airtable:primary" },
+  { id: "hubspot",  label: "HubSpot",         description: "Manage contacts, deals, and content", wave: 1, href: "/api/connections/oauth/hubspot?label=hubspot:primary" },
+  { id: "docs",     label: "Google Docs",     description: "Read and write documents",           wave: 1, href: "/api/connections/oauth/google?service=docs&label=docs:primary" },
+  { id: "github",   label: "GitHub",          description: "Create issues, PRs, and read repos", wave: 2, href: "/api/connections/oauth/github?label=github:primary" },
+  { id: "typeform", label: "Typeform",        description: "Read form responses and definitions", wave: 2, href: "/api/connections/oauth/typeform?label=typeform:primary" },
+  { id: "asana",    label: "Asana",           description: "Manage tasks and projects",          wave: 2, href: "/api/connections/oauth/asana?label=asana:primary" },
+  { id: "drive",    label: "Google Drive",    description: "Read and manage Drive files",        wave: 2, href: "/api/connections/oauth/google?service=drive&label=drive:primary" },
+  { id: "outlook",  label: "Outlook Mail",    description: "Send and read Outlook email",        wave: 2, href: "/api/connections/oauth/outlook?label=outlook:primary" },
 ];
 
 export default function ConnectionsPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [loading, setLoading] = useState(true);
-  const [testing, setTesting] = useState<string | null>(null);
+  const [testing, setTesting]   = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [connecting, setConnecting] = useState<string | null>(null);
   const searchParams = useSearchParams();
@@ -154,102 +148,97 @@ export default function ConnectionsPage() {
 
   return (
     <div className="space-y-8">
+
+      {/* ── Header ── */}
       <div>
-        <h1 className="text-xl font-semibold">Connections</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
+        <h1 className="text-3xl font-black tracking-tight">Connections</h1>
+        <p className="text-sm text-muted-foreground mt-1.5">
           Connect your apps. OAuth tokens are encrypted and stored securely.
         </p>
       </div>
 
       {successProvider && (
-        <div className="rounded-md bg-green-500/10 border border-green-500/20 text-green-700 dark:text-green-400 px-4 py-3 text-sm">
-          Successfully connected {PROVIDER_LABELS[successProvider] ?? successProvider}.
+        <div className="rounded-xl bg-green-500/10 border border-green-500/20 text-green-400 px-4 py-3 text-sm font-medium">
+          ✓ Successfully connected {PROVIDER_LABELS[successProvider] ?? successProvider}.
         </div>
       )}
       {errorCode && (
-        <div className="rounded-md bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 text-sm">
+        <div className="rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 text-sm">
           OAuth failed: {errorCode}. Please try again.
         </div>
       )}
 
-      {/* Existing connections */}
+      {/* Connected */}
       {!loading && connections.length > 0 && (
-        <section className="space-y-3">
-          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Connected</h2>
-          {connections.map((conn) => (
-            <Card key={conn.id}>
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-3">
-                    <ProviderLogo provider={conn.provider} />
-                    <div>
-                      <CardTitle className="text-sm">{conn.name}</CardTitle>
-                      <CardDescription className="text-xs mt-0.5">
-                        {PROVIDER_LABELS[conn.provider] ?? conn.provider}
-                        {conn.metadata?.email && <> · {conn.metadata.email}</>}
-                        {conn.last_validated_at && (
-                          <> · Tested {new Date(conn.last_validated_at).toLocaleDateString()}</>
-                        )}
-                      </CardDescription>
-                    </div>
-                  </div>
-                  <Badge variant={conn.is_valid ? "success" : "destructive"}>
-                    {conn.is_valid ? "Connected" : "Disconnected"}
-                  </Badge>
+        <section className="space-y-2">
+          <h2 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground/50">
+            Connected · {connections.length}
+          </h2>
+          <div className="rounded-xl border border-border bg-card divide-y divide-border/60 overflow-hidden">
+            {connections.map((conn) => (
+              <div key={conn.id} className="flex items-center gap-3 px-4 py-3.5 hover:bg-accent/30 transition-colors">
+                <ProviderLogo provider={conn.provider} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{conn.name}</p>
+                  <p className="text-[11px] text-muted-foreground/50 font-mono">
+                    {PROVIDER_LABELS[conn.provider] ?? conn.provider}
+                    {conn.metadata?.email && <> · {conn.metadata.email}</>}
+                    {conn.last_validated_at && (
+                      <> · tested {new Date(conn.last_validated_at).toLocaleDateString()}</>
+                    )}
+                  </p>
                 </div>
-              </CardHeader>
-              <CardContent className="pt-0 flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={testing === conn.id}
-                  onClick={() => handleTest(conn.id)}
-                >
-                  {testing === conn.id ? "Testing…" : "Test"}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-destructive hover:text-destructive"
-                  disabled={deleting === conn.id}
-                  onClick={() => handleDelete(conn.id)}
-                >
-                  {deleting === conn.id ? "Removing…" : "Disconnect"}
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
+                <Badge variant={conn.is_valid ? "success" : "destructive"}>
+                  {conn.is_valid ? "Connected" : "Error"}
+                </Badge>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button size="sm" variant="ghost" disabled={testing === conn.id} onClick={() => handleTest(conn.id)}
+                    className="text-xs h-7 px-2">
+                    {testing === conn.id ? "Testing…" : "Test"}
+                  </Button>
+                  <Button size="sm" variant="ghost" className="text-xs h-7 px-2 text-muted-foreground/60 hover:text-destructive"
+                    disabled={deleting === conn.id} onClick={() => handleDelete(conn.id)}>
+                    {deleting === conn.id ? "…" : "Disconnect"}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
         </section>
       )}
 
-      {/* Available to connect */}
+      {/* Available */}
       {([1, 2] as const).map((wave) => {
         const providers = AVAILABLE_PROVIDERS.filter((p) => p.wave === wave && !connectedProviders.has(p.id));
         if (providers.length === 0) return null;
         return (
-          <section key={wave} className="space-y-3">
-            <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-              {wave === 1 ? (connections.length > 0 ? "Add another" : "Available") : "More connectors"}
+          <section key={wave} className="space-y-2">
+            <h2 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground/50">
+              {wave === 1
+                ? (connections.length > 0 ? "Add another" : "Available")
+                : "More connectors"}
             </h2>
-            <div className="grid gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {providers.map((provider) => (
-                <Card key={provider.id} className="flex items-center justify-between px-5 py-4">
-                  <div className="flex items-center gap-3">
-                    <ProviderLogo provider={provider.id} />
-                    <div>
-                      <p className="text-sm font-medium">{provider.label}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{provider.description}</p>
-                    </div>
+                <div
+                  key={provider.id}
+                  className="group flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3.5 hover:bg-accent/30 hover:border-border/80 transition-all"
+                >
+                  <ProviderLogo provider={provider.id} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold">{provider.label}</p>
+                    <p className="text-[11px] text-muted-foreground/50 truncate">{provider.description}</p>
                   </div>
                   <Button
                     size="sm"
                     variant="outline"
+                    className="h-7 text-xs shrink-0"
                     disabled={connecting === provider.id}
                     onClick={() => handleConnect(provider)}
                   >
-                    {connecting === provider.id ? "Redirecting…" : "Connect"}
+                    {connecting === provider.id ? "…" : "Connect"}
                   </Button>
-                </Card>
+                </div>
               ))}
             </div>
           </section>

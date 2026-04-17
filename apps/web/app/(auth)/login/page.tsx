@@ -38,14 +38,25 @@ export default function LoginPage() {
   }
 
   return (
-    <div
-      className="min-h-screen flex items-center justify-center px-4"
-      style={{ background: "radial-gradient(ellipse 80% 60% at 50% -10%, rgba(249,115,22,0.09) 0%, transparent 60%)" }}
-    >
-      <div className="w-full max-w-sm">
+    <div className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden">
+      {/* Background layers */}
+      <div className="absolute inset-0 bg-grid-dots opacity-20" />
+      {/* Orange ambient orb — top center */}
+      <div
+        className="pointer-events-none absolute -top-32 left-1/2 -translate-x-1/2 w-[700px] h-[420px] rounded-full"
+        style={{ background: "radial-gradient(ellipse, rgba(249,115,22,0.12) 0%, transparent 70%)", filter: "blur(60px)" }}
+      />
+      {/* Purple accent orb — bottom right */}
+      <div
+        className="pointer-events-none absolute bottom-0 right-0 w-[500px] h-[400px] rounded-full"
+        style={{ background: "radial-gradient(ellipse, rgba(168,85,247,0.07) 0%, transparent 70%)", filter: "blur(80px)" }}
+      />
 
+      <div className="relative w-full max-w-sm">
         {/* Card */}
-        <div className="rounded-2xl border border-border bg-card p-8 shadow-xl">
+        <div className="relative rounded-2xl border border-white/8 bg-card/80 backdrop-blur-sm p-8 shadow-[0_0_0_1px_rgba(255,255,255,0.03),0_32px_64px_rgba(0,0,0,0.5)]">
+          {/* Top border glow */}
+          <div className="absolute top-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent rounded-t-2xl" />
 
           {/* Logo + heading */}
           <div className="flex flex-col items-center gap-4 mb-8">
@@ -65,7 +76,7 @@ export default function LoginPage() {
           <button
             onClick={handleGoogleLogin}
             disabled={loading}
-            className="w-full flex items-center justify-center gap-2.5 rounded-lg border border-border bg-background/50 px-4 py-2.5 text-sm font-medium hover:bg-accent transition-colors disabled:opacity-50 mb-5"
+            className="w-full flex items-center justify-center gap-2.5 rounded-lg border border-border bg-background/50 px-4 py-2.5 text-sm font-medium hover:bg-accent hover:border-border/80 transition-all duration-150 disabled:opacity-50 mb-5"
           >
             <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" aria-hidden>
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
@@ -78,9 +89,9 @@ export default function LoginPage() {
 
           {/* Divider */}
           <div className="relative flex items-center mb-5">
-            <div className="flex-1 border-t border-border" />
-            <span className="mx-3 text-xs text-muted-foreground">or</span>
-            <div className="flex-1 border-t border-border" />
+            <div className="flex-1 border-t border-border/60" />
+            <span className="mx-3 text-xs text-muted-foreground/50">or</span>
+            <div className="flex-1 border-t border-border/60" />
           </div>
 
           {/* Email form */}
@@ -95,7 +106,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-lg border border-input bg-background/60 px-3 py-2.5 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring transition-shadow"
+                className="w-full rounded-lg border border-input bg-background/60 px-3 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/40 transition-all"
                 placeholder="you@example.com"
               />
             </div>
@@ -104,7 +115,7 @@ export default function LoginPage() {
                 <label htmlFor="password" className="block text-xs font-medium text-muted-foreground">
                   Password
                 </label>
-                <Link href="/forgot-password" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+                <Link href="/forgot-password" className="text-xs text-muted-foreground/60 hover:text-foreground transition-colors">
                   Forgot password?
                 </Link>
               </div>
@@ -114,7 +125,7 @@ export default function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-lg border border-input bg-background/60 px-3 py-2.5 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring transition-shadow"
+                className="w-full rounded-lg border border-input bg-background/60 px-3 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/40 transition-all"
                 placeholder="••••••••"
               />
             </div>
@@ -128,14 +139,14 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-lg bg-primary text-primary-foreground px-4 py-2.5 text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity shadow-[0_0_16px_rgba(249,115,22,0.3)]"
+              className="w-full rounded-lg bg-primary text-primary-foreground px-4 py-2.5 text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity shadow-[0_0_20px_rgba(249,115,22,0.35)]"
             >
               {loading ? "Signing in…" : "Sign in"}
             </button>
           </form>
 
           {/* Footer link */}
-          <p className="mt-6 text-center text-xs text-muted-foreground">
+          <p className="mt-6 text-center text-xs text-muted-foreground/60">
             No account?{" "}
             <Link href="/signup" className="text-foreground font-medium hover:text-primary transition-colors">
               Sign up for free
@@ -144,7 +155,7 @@ export default function LoginPage() {
         </div>
 
         {/* Back link */}
-        <p className="text-center mt-4 text-xs text-muted-foreground">
+        <p className="text-center mt-4 text-xs text-muted-foreground/50">
           <Link href="/" className="hover:text-foreground transition-colors">
             ← Back to homepage
           </Link>

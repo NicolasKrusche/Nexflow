@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { createBrowserClient } from "@/lib/supabase/client";
+import { ThemePicker } from "@/components/theme-picker";
 
 // ─── Nav item ─────────────────────────────────────────────────────────────────
 
@@ -140,8 +141,11 @@ export function Sidebar() {
           icon={<KeyIcon />} />
       </nav>
 
-      <div className="p-2 border-t border-border shrink-0">
-        <SignOutButton />
+      <div className="border-t border-border shrink-0">
+        <ThemePicker />
+        <div className="p-2">
+          <SignOutButton />
+        </div>
       </div>
     </aside>
   );

@@ -35,19 +35,28 @@ function formatDateTime(iso: string | null): string {
   return new Date(iso).toLocaleString();
 }
 
+const STATUS_STYLES: Record<string, string> = {
+  pending:          "bg-muted/60 text-muted-foreground",
+  running:          "bg-yellow-500/12 text-yellow-400",
+  completed:        "bg-green-500/12 text-green-400",
+  success:          "bg-green-500/12 text-green-400",
+  failed:           "bg-red-500/12 text-red-400",
+  cancelled:        "bg-muted/60 text-muted-foreground",
+  waiting_approval: "bg-blue-500/12 text-blue-400",
+};
+
+const STATUS_DOT: Record<string, string> = {
+  running:          "bg-yellow-400",
+  completed:        "bg-green-500",
+  success:          "bg-green-500",
+  failed:           "bg-red-500",
+  waiting_approval: "bg-blue-400",
+};
+
 function StatusBadge({ status }: { status: string }) {
-  const classes: Record<string, string> = {
-    pending: "bg-muted text-muted-foreground",
-    running: "bg-yellow-500/15 text-yellow-700 dark:text-yellow-400",
-    completed: "bg-green-500/15 text-green-700 dark:text-green-400",
-    success: "bg-green-500/15 text-green-700 dark:text-green-400",
-    failed: "bg-destructive/15 text-destructive",
-    cancelled: "bg-muted text-muted-foreground",
-    waiting_approval: "bg-blue-500/15 text-blue-700 dark:text-blue-400",
-  };
-  const cls = classes[status] ?? "bg-muted text-muted-foreground";
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${cls}`}>
+    <span className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[10px] font-semibold font-mono capitalize shrink-0 ${STATUS_STYLES[status] ?? "bg-muted/60 text-muted-foreground"}`}>
+      {STATUS_DOT[status] && <span className={`w-1 h-1 rounded-full shrink-0 ${STATUS_DOT[status]}`} />}
       {status.replace(/_/g, " ")}
     </span>
   );
@@ -64,14 +73,12 @@ export default async function RunsPage({
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Get all program IDs owned by this user (RLS-safe join via service client)
   const { data: programsRaw } = await supabase
     .from("programs")
     .select("id")
     .eq("user_id", user.id);
 
   const programIds = (programsRaw ?? []).map((p: { id: string }) => p.id);
-
   const serviceClient = createServiceClient();
 
   let query = serviceClient
@@ -93,26 +100,34 @@ export default async function RunsPage({
   const completed = runs.filter((r) => !activeStatuses.includes(r.status));
 
   const STATUS_FILTERS = [
-    { label: "All", value: "" },
-    { label: "Running", value: "running" },
+    { label: "All",       value: "" },
+    { label: "Running",   value: "running" },
     { label: "Completed", value: "completed" },
-    { label: "Failed", value: "failed" },
+    { label: "Failed",    value: "failed" },
     { label: "Cancelled", value: "cancelled" },
   ];
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Runs</h1>
-        <div className="flex items-center gap-1">
+
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-black tracking-tight">Runs</h1>
+          <p className="text-sm text-muted-foreground mt-1.5">
+            {runs.length > 0 ? `${runs.length} run${runs.length !== 1 ? "s" : ""}` : "No runs yet"}
+          </p>
+        </div>
+        {/* Filter tabs */}
+        <div className="inline-flex items-center gap-0.5 rounded-lg border border-border bg-card p-1 shrink-0">
           {STATUS_FILTERS.map(({ label, value }) => (
             <Link
               key={label}
               href={value ? `/runs?status=${value}` : "/runs"}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
                 (searchParams.status ?? "") === value
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  ? "bg-accent text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
               }`}
             >
               {label}
@@ -122,26 +137,31 @@ export default async function RunsPage({
       </div>
 
       {runs.length === 0 ? (
-        <div className="rounded-lg border border-border p-12 text-center">
-          <p className="text-sm text-muted-foreground">
-            {searchParams.status ? `No ${searchParams.status} runs.` : "No runs yet. Open a program and click Run."}
+        <div className="rounded-xl border border-dashed border-border bg-card/50 p-14 text-center">
+          <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl border border-border bg-card text-muted-foreground/40 mb-4">
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-4 h-4">
+              <path d="M3 3.732a1.5 1.5 0 0 1 2.305-1.265l6.706 4.267a1.5 1.5 0 0 1 0 2.531L5.305 13.533A1.5 1.5 0 0 1 3 12.267V3.732Z" />
+            </svg>
+          </div>
+          <p className="text-sm font-medium mb-1">
+            {searchParams.status ? `No ${searchParams.status} runs` : "No runs yet"}
           </p>
+          <p className="text-xs text-muted-foreground/60">Open a program and click Run to get started.</p>
         </div>
       ) : (
         <div className="space-y-6">
           {active.length > 0 && !searchParams.status && (
             <section className="space-y-2">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">
-                Active
+              <h2 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground/50">
+                Active · {active.length}
               </h2>
               <RunList runs={active} />
             </section>
           )}
-
           <section className="space-y-2">
             {active.length > 0 && !searchParams.status && (
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">
-                History
+              <h2 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground/50">
+                History · {completed.length}
               </h2>
             )}
             <RunList runs={searchParams.status ? runs : completed} />
@@ -156,38 +176,40 @@ const ACTIVE_STATUSES = ["running", "waiting_approval", "pending"];
 
 function RunList({ runs }: { runs: RunRow[] }) {
   return (
-    <div className="rounded-lg border border-border divide-y divide-border overflow-hidden">
+    <div className="rounded-xl border border-border bg-card divide-y divide-border/60 overflow-hidden">
       {runs.map((run) => (
-        <div key={run.id} className="flex items-center justify-between px-4 py-3 hover:bg-accent transition-colors">
+        <div key={run.id} className="group flex items-center gap-3 px-4 py-3.5 hover:bg-accent/30 transition-colors">
           <Link
             href={`/programs/${run.program_id}/runs/${run.id}`}
             className="flex items-center gap-3 min-w-0 flex-1"
           >
             <StatusBadge status={run.status} />
             <div className="min-w-0">
-              <p className="text-sm font-medium truncate">
+              <p className="text-sm font-semibold truncate">
                 {run.programs?.name ?? "Unknown program"}
               </p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground/50 font-mono">
                 {formatDateTime(run.started_at ?? run.created_at)}
-                <span className="mx-1.5">·</span>
+                <span className="mx-1.5 opacity-40">·</span>
                 {run.triggered_by}
                 {run.error_message && (
-                  <span className="text-destructive ml-2">
-                    — {run.error_message.slice(0, 60)}
-                    {run.error_message.length > 60 ? "…" : ""}
+                  <span className="text-red-400/80 ml-2">
+                    — {run.error_message.slice(0, 60)}{run.error_message.length > 60 ? "…" : ""}
                   </span>
                 )}
               </p>
             </div>
           </Link>
-          <div className="flex items-center gap-3 shrink-0 ml-4">
-            <span className="text-xs text-muted-foreground">
+          <div className="flex items-center gap-3 shrink-0 ml-2">
+            <span className="text-[11px] text-muted-foreground/40 font-mono tabular-nums">
               {formatDuration(run.started_at, run.completed_at)}
             </span>
             {ACTIVE_STATUSES.includes(run.status) && (
               <StopRunButton runId={run.id} />
             )}
+            <svg viewBox="0 0 16 16" fill="currentColor" className="w-3 h-3 text-muted-foreground/20 group-hover:text-muted-foreground/50 transition-colors">
+              <path fillRule="evenodd" d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
+            </svg>
           </div>
         </div>
       ))}

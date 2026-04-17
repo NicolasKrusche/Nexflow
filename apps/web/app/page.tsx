@@ -293,6 +293,10 @@ export default function LandingPage() {
           style={{ background: "radial-gradient(ellipse 65% 75% at 50% 50%, rgba(9,9,9,0.82) 0%, rgba(9,9,9,0.4) 60%, transparent 100%)" }}
         />
 
+        {/* Edge masks — fade node clusters at viewport edges */}
+        <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-52 bg-gradient-to-r from-background to-transparent z-10" />
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-52 bg-gradient-to-l from-background to-transparent z-10" />
+
         {/* Bottom fade */}
         <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-48 bg-gradient-to-t from-background to-transparent" />
 
@@ -376,9 +380,9 @@ export default function LandingPage() {
       </section>
 
       {/* ── How it works ── */}
-      <section id="how-it-works" className="py-28 px-6">
+      <section id="how-it-works" className="py-20 px-6">
         <div className="mx-auto max-w-5xl">
-          <div className="text-center mb-20">
+          <div className="text-center mb-12">
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary mb-3">How it works</p>
             <h2 className="text-4xl sm:text-5xl font-black tracking-tight">Three steps.</h2>
             <p className="text-muted-foreground mt-4 text-base max-w-sm mx-auto">From idea to running automation in under a minute.</p>
@@ -417,9 +421,9 @@ export default function LandingPage() {
       </section>
 
       {/* ── Features bento ── */}
-      <section id="features" className="py-28 px-6 border-t border-border/40">
+      <section id="features" className="py-20 px-6 border-t border-border/40">
         <div className="mx-auto max-w-5xl">
-          <div className="text-center mb-20">
+          <div className="text-center mb-12">
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-primary mb-3">Features</p>
             <h2 className="text-4xl sm:text-5xl font-black tracking-tight">Built for production.</h2>
             <p className="text-muted-foreground mt-4 text-base max-w-sm mx-auto">Everything you need — nothing you don&apos;t.</p>
@@ -518,7 +522,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── CTA ── */}
-      <section className="py-28 px-6 border-t border-border/40">
+      <section className="py-20 px-6 border-t border-border/40">
         <div className="mx-auto max-w-xl">
           <div className="relative rounded-3xl border border-border overflow-hidden p-14 text-center">
             <div className="pointer-events-none absolute inset-0 bg-grid-dots opacity-30" />

@@ -3,7 +3,8 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
+  /* ── Default / Dark (orange accent) ── */
+  :root, .dark {
     --background: 0 0% 3.5%;
     --foreground: 0 0% 96%;
     --card: 0 0% 5.5%;
@@ -25,32 +26,216 @@
     --ring: 22 95% 52%;
     --radius: 0.5rem;
   }
-  .dark {
-    --background: 0 0% 3.5%;
-    --foreground: 0 0% 96%;
-    --card: 0 0% 5.5%;
-    --card-foreground: 0 0% 96%;
-    --popover: 0 0% 5.5%;
-    --popover-foreground: 0 0% 96%;
-    --primary: 22 95% 52%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 9%;
-    --secondary-foreground: 0 0% 96%;
-    --muted: 0 0% 9%;
-    --muted-foreground: 0 0% 44%;
-    --accent: 0 0% 9%;
-    --accent-foreground: 0 0% 96%;
+
+  /* ── Midnight Blue ── */
+  .midnight-blue {
+    --background: 222 47% 6%;
+    --foreground: 210 100% 97%;
+    --card: 222 47% 9%;
+    --card-foreground: 210 100% 97%;
+    --popover: 222 47% 9%;
+    --popover-foreground: 210 100% 97%;
+    --primary: 210 100% 60%;
+    --primary-foreground: 222 47% 6%;
+    --secondary: 222 47% 12%;
+    --secondary-foreground: 210 100% 97%;
+    --muted: 222 47% 12%;
+    --muted-foreground: 210 30% 55%;
+    --accent: 222 47% 12%;
+    --accent-foreground: 210 100% 97%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 11%;
-    --input: 0 0% 11%;
+    --border: 222 35% 14%;
+    --input: 222 35% 14%;
+    --ring: 210 100% 60%;
+    --radius: 0.5rem;
+  }
+
+  /* ── Graphite (indigo accent) ── */
+  .graphite {
+    --background: 220 10% 8%;
+    --foreground: 220 15% 95%;
+    --card: 220 10% 11%;
+    --card-foreground: 220 15% 95%;
+    --popover: 220 10% 11%;
+    --popover-foreground: 220 15% 95%;
+    --primary: 240 80% 65%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 10% 14%;
+    --secondary-foreground: 220 15% 95%;
+    --muted: 220 10% 14%;
+    --muted-foreground: 220 10% 55%;
+    --accent: 220 10% 14%;
+    --accent-foreground: 220 15% 95%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 10% 16%;
+    --input: 220 10% 16%;
+    --ring: 240 80% 65%;
+    --radius: 0.5rem;
+  }
+
+  /* ── Emerald Terminal ── */
+  .emerald-terminal {
+    --background: 150 15% 4%;
+    --foreground: 140 80% 90%;
+    --card: 150 15% 7%;
+    --card-foreground: 140 80% 90%;
+    --popover: 150 15% 7%;
+    --popover-foreground: 140 80% 90%;
+    --primary: 145 72% 52%;
+    --primary-foreground: 150 15% 4%;
+    --secondary: 150 15% 10%;
+    --secondary-foreground: 140 80% 90%;
+    --muted: 150 15% 10%;
+    --muted-foreground: 145 25% 50%;
+    --accent: 150 15% 10%;
+    --accent-foreground: 140 80% 90%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 150 20% 12%;
+    --input: 150 20% 12%;
+    --ring: 145 72% 52%;
+    --radius: 0.5rem;
+  }
+
+  /* ── Rose Gold ── */
+  .rose-gold {
+    --background: 340 20% 6%;
+    --foreground: 340 30% 95%;
+    --card: 340 20% 9%;
+    --card-foreground: 340 30% 95%;
+    --popover: 340 20% 9%;
+    --popover-foreground: 340 30% 95%;
+    --primary: 340 75% 62%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 340 20% 12%;
+    --secondary-foreground: 340 30% 95%;
+    --muted: 340 20% 12%;
+    --muted-foreground: 340 15% 55%;
+    --accent: 340 20% 12%;
+    --accent-foreground: 340 30% 95%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 340 15% 14%;
+    --input: 340 15% 14%;
+    --ring: 340 75% 62%;
+    --radius: 0.5rem;
+  }
+
+  /* ── Cyberpunk Neon ── */
+  .cyberpunk-neon {
+    --background: 270 30% 5%;
+    --foreground: 180 100% 97%;
+    --card: 270 30% 8%;
+    --card-foreground: 180 100% 97%;
+    --popover: 270 30% 8%;
+    --popover-foreground: 180 100% 97%;
+    --primary: 180 100% 55%;
+    --primary-foreground: 270 30% 5%;
+    --secondary: 270 30% 11%;
+    --secondary-foreground: 180 100% 97%;
+    --muted: 270 30% 11%;
+    --muted-foreground: 180 30% 55%;
+    --accent: 270 30% 11%;
+    --accent-foreground: 180 100% 97%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 270 30% 13%;
+    --input: 270 30% 13%;
+    --ring: 180 100% 55%;
+    --radius: 0.5rem;
+  }
+
+  /* ── Light Mode ── */
+  .light {
+    --background: 40 20% 96%;
+    --foreground: 220 15% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 15% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 15% 12%;
+    --primary: 22 95% 52%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 20% 92%;
+    --secondary-foreground: 220 15% 12%;
+    --muted: 210 20% 92%;
+    --muted-foreground: 215 14% 40%;
+    --accent: 210 20% 92%;
+    --accent-foreground: 220 15% 12%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 214 20% 86%;
+    --input: 214 20% 86%;
     --ring: 22 95% 52%;
+    --radius: 0.5rem;
+  }
+
+  /* ── Liquid Glass (base tokens — surfaces overridden below) ── */
+  .liquid-glass {
+    --background: 0 0% 5%;
+    --foreground: 0 0% 95%;
+    --card: 0 0% 8%;
+    --card-foreground: 0 0% 95%;
+    --popover: 0 0% 8%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 200 100% 65%;
+    --primary-foreground: 200 100% 10%;
+    --secondary: 0 0% 11%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 0 0% 11%;
+    --muted-foreground: 0 0% 50%;
+    --accent: 0 0% 11%;
+    --accent-foreground: 0 0% 95%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --ring: 200 100% 65%;
+    --radius: 0.75rem;
   }
 }
 
 @layer base {
   * { @apply border-border; }
   body { @apply bg-background text-foreground antialiased; }
+}
+
+/* ── Liquid Glass surface overrides ──────────────────────────────────────────
+   backdrop-filter + rgba cannot be expressed as CSS variables.
+   Scoped tightly to .liquid-glass — never bleeds into other themes.          */
+
+.liquid-glass .bg-card,
+.liquid-glass [data-slot="card"] {
+  background: rgba(255, 255, 255, 0.04) !important;
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.liquid-glass aside {
+  background: rgba(255, 255, 255, 0.03) !important;
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border-color: rgba(255, 255, 255, 0.07) !important;
+}
+
+.liquid-glass [role="dialog"] .bg-card,
+.liquid-glass [data-radix-popper-content-wrapper] {
+  background: rgba(15, 15, 25, 0.75) !important;
+  backdrop-filter: blur(40px) saturate(200%);
+  -webkit-backdrop-filter: blur(40px) saturate(200%);
+}
+
+.liquid-glass .bg-primary {
+  background: linear-gradient(135deg, hsl(200, 100%, 60%), hsl(280, 80%, 62%)) !important;
+}
+
+.liquid-glass .text-primary {
+  background: linear-gradient(135deg, hsl(200, 100%, 70%), hsl(280, 80%, 70%));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 /* ── Dot grid ── */
