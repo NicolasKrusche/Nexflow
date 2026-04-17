@@ -1,5 +1,5 @@
 import { NonRetriableError } from "inngest";
-import { parseExpression } from "cron-parser";
+import { CronExpressionParser } from "cron-parser"; // fix: cron-parser v5 exports CronExpressionParser, not parseExpression
 import { inngest } from "@/lib/inngest";
 import { createServiceClient } from "@/lib/api";
 
@@ -115,7 +115,7 @@ export const cronRunner = inngest.createFunction(
         const timezone = ((trigger.config as Record<string, unknown>).timezone as string) ?? "UTC";
         let nextRun: string | null = null;
         try {
-          const interval = parseExpression(expr, {
+          const interval = CronExpressionParser.parse(expr, {
             currentDate: new Date(),
             tz: timezone,
           });

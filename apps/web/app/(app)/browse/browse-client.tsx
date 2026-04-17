@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +36,7 @@ export function BrowseClient({
   initialPrograms: PublicProgram[];
   initialTotal: number;
 }) {
+  const router = useRouter();
   const [programs, setPrograms] = useState<PublicProgram[]>(initialPrograms);
   const [total, setTotal] = useState(initialTotal);
   const [loading, setLoading] = useState(false);
@@ -42,6 +44,7 @@ export function BrowseClient({
   const [q, setQ] = useState("");
   const [forking, setForking] = useState<string | null>(null);
   const [forked, setForked] = useState<Record<string, string>>({}); // id → new program id
+  const [forkError, setForkError] = useState<string | null>(null); // fix: inline error surface for fork failures
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -86,18 +89,21 @@ export function BrowseClient({
   const allTags = [...new Set(programs.flatMap((p) => p.tags))].sort();
 
   async function handleFork(programId: string) {
+    // fix: give user a visible response on every outcome — navigate on success, show inline error on failure
     setForking(programId);
+    setForkError(null);
     try {
       const res = await fetch(`/api/browse/${programId}/fork`, { method: "POST" });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
-        alert(body.error ?? "Failed to fork program");
+        setForkError(body.error ?? "Failed to fork program");
         return;
       }
       const data = (await res.json()) as { program: { id: string } };
       setForked((prev) => ({ ...prev, [programId]: data.program.id }));
+      router.push(`/programs/${data.program.id}`);
     } catch {
-      alert("Failed to fork program");
+      setForkError("Failed to fork program — check your network and try again.");
     } finally {
       setForking(null);
     }
@@ -113,6 +119,19 @@ export function BrowseClient({
           {" — fork one to start from a working blueprint."}
         </p>
       </div>
+
+      {/* fix: inline fork error banner (replaces silent alert) */}
+      {forkError && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 text-destructive text-sm px-3 py-2 flex items-center justify-between gap-3">
+          <span>{forkError}</span>
+          <button
+            onClick={() => setForkError(null)}
+            className="text-xs underline underline-offset-2 hover:opacity-80"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Search + filter */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

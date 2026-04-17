@@ -1,0 +1,300 @@
+
+> @flowos/web@0.0.1 dev N:\ai\apps\web
+> next dev
+
+  ▲ Next.js 14.2.3
+  - Local:        http://localhost:3000
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 2.5s
+ ○ Compiling /middleware ...
+ ✓ Compiled /middleware in 560ms (168 modules)
+[middleware] path: / user: null error: Auth session missing!
+[middleware] cookies: 
+ ○ Compiling / ...
+ ✓ Compiled / in 2.8s (560 modules)
+ GET / 200 in 2971ms
+[middleware] path: /dashboard user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ○ Compiling /dashboard ...
+ ✓ Compiled /dashboard in 1674ms (784 modules)
+ GET /dashboard 200 in 2811ms
+[middleware] path: /api/approvals user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+[middleware] path: /api/runs/failed-count user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /api/approvals in 87ms (460 modules)
+ ✓ Compiled /api/runs/failed-count in 75ms (462 modules)
+ GET /api/approvals 200 in 457ms
+[middleware] path: /api/approvals user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/runs/failed-count?since=1775944981987 200 in 556ms
+ GET /api/approvals 200 in 181ms
+[middleware] path: /api/runs/failed-count user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/runs/failed-count?since=1775944981987 200 in 368ms
+[middleware] path: /connections user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /connections in 395ms (780 modules)
+[middleware] path: /connections user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+[middleware] path: /api/connections user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /api/connections in 94ms (466 modules)
+[middleware] path: /api/runs/failed-count user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /api/runs/failed-count in 61ms (468 modules)
+ GET /api/connections 200 in 730ms
+[middleware] path: /api/connections user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/runs/failed-count?since=1775944981987 200 in 615ms
+ GET /api/connections 200 in 228ms
+[middleware] path: /api/connections/7859a980-54d8-4b21-85fc-8d2e3a4d2dad user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /api/connections/[id] in 96ms (472 modules)
+ POST /api/connections/7859a980-54d8-4b21-85fc-8d2e3a4d2dad 200 in 1707ms
+[middleware] path: /api/connections user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/connections 200 in 152ms
+[middleware] path: /api/connections/c4042e3b-4ee9-4ebd-b484-f02672b87896 user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ POST /api/connections/c4042e3b-4ee9-4ebd-b484-f02672b87896 200 in 1160ms
+[middleware] path: /api/connections user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/connections 200 in 163ms
+[middleware] path: /programs/new user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /programs/new in 256ms (804 modules)
+[middleware] path: /programs/new user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+[middleware] path: /api/runs/failed-count user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+[middleware] path: /api/connections user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/connections 200 in 210ms
+ GET /api/runs/failed-count?since=1775944981987 200 in 346ms
+[middleware] path: /api/connections user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/connections 200 in 232ms
+[middleware] path: /api/keys user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /api/keys in 252ms (492 modules)
+ GET /api/keys 200 in 672ms
+[middleware] path: /api/genesis user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ○ Compiling /api/genesis ...
+ ✓ Compiled /api/genesis in 862ms (682 modules)
+ POST /api/genesis 502 in 2271ms
+[middleware] path: /api/keys user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/keys 200 in 240ms
+[middleware] path: /api/genesis user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ POST /api/genesis 502 in 44350ms
+[middleware] path: /api/programs/import user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /api/programs/import in 221ms (488 modules)
+ POST /api/programs/import 201 in 810ms
+[middleware] path: /programs/2180a473-39f7-4abf-a7b0-9ead04fa1ba8 user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /programs/[id] in 465ms (826 modules)
+[middleware] path: /programs/2180a473-39f7-4abf-a7b0-9ead04fa1ba8 user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+[middleware] path: /api/runs/failed-count user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /api/runs/failed-count in 91ms (500 modules)
+ GET /api/runs/failed-count?since=1775944981987 200 in 381ms
+[middleware] path: /programs/2180a473-39f7-4abf-a7b0-9ead04fa1ba8/triggers user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /programs/[id]/triggers in 239ms (835 modules)
+[middleware] path: /programs/2180a473-39f7-4abf-a7b0-9ead04fa1ba8/triggers user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+[middleware] path: /api/runs/failed-count user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/runs/failed-count?since=1775944981987 200 in 244ms
+[middleware] path: /api/programs/2180a473-39f7-4abf-a7b0-9ead04fa1ba8/triggers user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /api/programs/[id]/triggers in 422ms (526 modules)
+ POST /api/programs/2180a473-39f7-4abf-a7b0-9ead04fa1ba8/triggers 400 in 1057ms
+[middleware] path: /api/programs/2180a473-39f7-4abf-a7b0-9ead04fa1ba8/triggers user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ POST /api/programs/2180a473-39f7-4abf-a7b0-9ead04fa1ba8/triggers 400 in 227ms
+[middleware] path: /api/programs/2180a473-39f7-4abf-a7b0-9ead04fa1ba8/triggers user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ POST /api/programs/2180a473-39f7-4abf-a7b0-9ead04fa1ba8/triggers 500 in 350ms
+[middleware] path: /programs/2180a473-39f7-4abf-a7b0-9ead04fa1ba8 user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /programs/2180a473-39f7-4abf-a7b0-9ead04fa1ba8 200 in 621ms
+[middleware] path: /api/approvals user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+[middleware] path: /api/runs/failed-count user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /api/runs/failed-count in 145ms (510 modules)
+ ✓ Compiled (512 modules)
+ GET /api/approvals 200 in 486ms
+[middleware] path: /api/approvals user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/runs/failed-count?since=1775944981987 200 in 576ms
+[middleware] path: /api/runs/failed-count user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/approvals 200 in 256ms
+ GET /api/runs/failed-count?since=1775944981987 200 in 244ms
+[middleware] path: /api/programs/2180a473-39f7-4abf-a7b0-9ead04fa1ba8/preflight user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /api/programs/[id]/preflight in 124ms (516 modules)
+ POST /api/programs/2180a473-39f7-4abf-a7b0-9ead04fa1ba8/preflight 200 in 939ms
+[middleware] path: /api/runs user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /api/runs in 184ms (518 modules)
+ POST /api/runs 500 in 789ms
+[middleware] path: /programs/2180a473-39f7-4abf-a7b0-9ead04fa1ba8/editor user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ○ Compiling /programs/[id]/editor ...
+ ✓ Compiled /programs/[id]/editor in 1448ms (1232 modules)
+[middleware] path: /programs/2180a473-39f7-4abf-a7b0-9ead04fa1ba8/editor user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+[middleware] path: /api/runs user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/runs?program_id=2180a473-39f7-4abf-a7b0-9ead04fa1ba8 500 in 237ms
+[middleware] path: /api/runs user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/runs?program_id=2180a473-39f7-4abf-a7b0-9ead04fa1ba8 500 in 234ms
+[middleware] path: /api/programs/2180a473-39f7-4abf-a7b0-9ead04fa1ba8/versions user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /api/programs/[id]/versions in 258ms (678 modules)
+ GET /api/programs/2180a473-39f7-4abf-a7b0-9ead04fa1ba8/versions 200 in 1164ms
+[middleware] path: /api/programs/2180a473-39f7-4abf-a7b0-9ead04fa1ba8/versions user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/programs/2180a473-39f7-4abf-a7b0-9ead04fa1ba8/versions 200 in 253ms
+[middleware] path: /programs/2180a473-39f7-4abf-a7b0-9ead04fa1ba8 user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+[middleware] path: /api/approvals user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+[middleware] path: /api/runs/failed-count user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /api/runs/failed-count in 130ms (680 modules)
+ ✓ Compiled (682 modules)
+ GET /api/approvals 200 in 456ms
+[middleware] path: /api/approvals user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/runs/failed-count?since=1775944981987 200 in 602ms
+[middleware] path: /api/runs/failed-count user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/approvals 200 in 270ms
+ GET /api/runs/failed-count?since=1775944981987 200 in 218ms
+[middleware] path: /runs user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ○ Compiling /runs ...
+ ✓ Compiled /runs in 513ms (1196 modules)
+[middleware] path: /runs user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+[middleware] path: /programs/f599626f-dd1b-4f75-a1fa-bb1460f25cd5/runs/598c2310-4a55-4085-8ed0-08b2dc839ee9 user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /programs/[id]/runs/[runId] in 312ms (1203 modules)
+[middleware] path: /programs/f599626f-dd1b-4f75-a1fa-bb1460f25cd5/runs/598c2310-4a55-4085-8ed0-08b2dc839ee9 user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+[middleware] path: / user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled / in 219ms (685 modules)
+[middleware] path: / user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+[middleware] path: /login user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+[middleware] path: /dashboard user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /dashboard in 160ms (690 modules)
+[middleware] path: /dashboard user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+[middleware] path: /api/approvals user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+[middleware] path: /api/runs/failed-count user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/approvals 200 in 160ms
+[middleware] path: /api/approvals user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/runs/failed-count?since=1776447142749 200 in 240ms
+[middleware] path: /api/runs/failed-count user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/approvals 200 in 195ms
+ GET /api/runs/failed-count?since=1776447142749 200 in 243ms
+[middleware] path: /approvals user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /approvals in 306ms (1206 modules)
+[middleware] path: /approvals user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+[middleware] path: /api/runs/failed-count user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/runs/failed-count?since=1776447142749 200 in 268ms
+[middleware] path: /api-keys user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /api-keys in 268ms (1210 modules)
+[middleware] path: /api-keys user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+[middleware] path: /api/runs/failed-count user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+[middleware] path: /api/keys user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/runs/failed-count?since=1776447142749 200 in 382ms
+ ✓ Compiled /api/keys in 348ms (697 modules)
+ GET /api/keys 200 in 628ms
+[middleware] path: /api/keys user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/keys 200 in 201ms
+[middleware] path: /api/keys/1ba33fa8-54bb-44ce-ae9d-8da53b0ba6f2 user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /api/keys/[id] in 146ms (515 modules)
+ POST /api/keys/1ba33fa8-54bb-44ce-ae9d-8da53b0ba6f2 200 in 1002ms
+[middleware] path: /api/keys user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/keys 200 in 164ms
+[middleware] path: /programs/import user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /programs/import in 263ms (1025 modules)
+[middleware] path: /programs/import user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+[middleware] path: /api/runs/failed-count user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/runs/failed-count?since=1776447142749 200 in 263ms
+[middleware] path: /browse user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /browse in 216ms (1025 modules)
+[middleware] path: /browse user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+[middleware] path: /api/runs/failed-count user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ GET /api/runs/failed-count?since=1776447142749 200 in 339ms
+[middleware] path: /api/browse user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /api/browse in 103ms (503 modules)
+ GET /api/browse?q=gmail 200 in 297ms
+[middleware] path: /api/browse/17b4a2c6-1d28-4c1b-a2c7-d9c5dd20e8d5/fork user: demo@nexflow.systems error: null
+[middleware] cookies: sb-fzvmsejkqjbqyavxvirf-auth-token=base64-eyJhY2Nlc3NfdG9rZW4iOiJleUpoYkdja
+ ✓ Compiled /api/browse/[id]/fork in 184ms (509 modules)
+ POST /api/browse/17b4a2c6-1d28-4c1b-a2c7-d9c5dd20e8d5/fork 500 in 1414ms
+ ✓ Compiled in 599ms (534 modules)
+ ✓ Compiled in 192ms (534 modules)
+ ✓ Compiled in 218ms (534 modules)
+ ✓ Compiled in 200ms (534 modules)
+ ✓ Compiled in 193ms (534 modules)
+ ✓ Compiled in 182ms (534 modules)
+ ✓ Compiled in 218ms (534 modules)
+ ✓ Compiled in 346ms (534 modules)
+ ✓ Compiled in 240ms (534 modules)
+ ✓ Compiled in 330ms (534 modules)
+ ✓ Compiled in 277ms (534 modules)
+ ✓ Compiled in 243ms (534 modules)
+ ✓ Compiled in 224ms (534 modules)
+ ✓ Compiled in 176ms (534 modules)
+ ✓ Compiled in 170ms (534 modules)
+ ✓ Compiled in 176ms (534 modules)
+ ✓ Compiled in 193ms (534 modules)
+ ✓ Compiled in 181ms (534 modules)
+ ✓ Compiled in 613ms (1016 modules)
+ ✓ Compiled in 586ms (1016 modules)
+ ✓ Compiled in 382ms (1016 modules)
+ ✓ Compiled in 497ms (1016 modules)
+ ✓ Compiled in 488ms (1016 modules)
+ ✓ Compiled in 390ms (534 modules)
+ ✓ Compiled in 234ms (534 modules)
+ ✓ Compiled in 195ms (534 modules)

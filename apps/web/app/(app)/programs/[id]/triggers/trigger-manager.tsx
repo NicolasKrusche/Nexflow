@@ -112,7 +112,10 @@ function NewTriggerForm({
         <label className="block text-xs text-muted-foreground mb-1.5">Type</label>
         <select
           value={type}
-          onChange={(e) => setType(e.target.value)}
+          onChange={(e) => {
+            setType(e.target.value);
+            setError(null); // fix: clear stale cron/field errors when switching trigger type
+          }}
           className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
         >
           <option value="manual">Manual (button only)</option>

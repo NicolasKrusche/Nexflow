@@ -44,9 +44,12 @@ function CheckIcon({ status }: { status: PreFlightCheck["status"] }) {
     );
   }
 
+  // fix: skip status rendered as yellow warning (informational, not failure) to match "All checks passed" banner
   return (
-    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-muted text-muted-foreground text-xs">
-      -
+    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-yellow-500/15 text-yellow-700 dark:text-yellow-400">
+      <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2} className="h-3 w-3">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6 4v3M6 8.5v.01" />
+      </svg>
     </span>
   );
 }
@@ -148,6 +151,7 @@ export function RunPanel({ programId }: { programId: string }) {
 
   const allPassed = preflight?.result.valid === true;
   const failCount = preflight?.checks.filter((check) => check.status === "fail").length ?? 0;
+  const skipCount = preflight?.checks.filter((check) => check.status === "skip").length ?? 0; // fix: track warnings vs hard failures
 
   return (
     <div className="rounded-lg border border-border p-4 space-y-4">
@@ -191,8 +195,10 @@ export function RunPanel({ programId }: { programId: string }) {
                 <CheckIcon status={check.status} />
                 <span className="text-sm">{CHECK_LABELS[check.code] ?? check.label}</span>
                 {check.status === "skip" && (
-                  <span className="text-xs text-muted-foreground">(not configured)</span>
-                )}
+                  <span className="text-xs text-yellow-700 dark:text-yellow-400">
+                    Not applicable — nothing configured for this check
+                  </span>
+                )}{/* fix: clarify skip as informational, not a failure */}
               </div>
 
               {check.failures.map((failure, index) => {
@@ -243,7 +249,9 @@ export function RunPanel({ programId }: { programId: string }) {
 
           {allPassed ? (
             <div className="rounded-md bg-green-500/10 border border-green-500/20 text-green-700 dark:text-green-400 px-3 py-2 text-xs mt-2">
-              All checks passed. Click Run to execute this program.
+              {skipCount > 0
+                ? `Ready to run. ${skipCount} check${skipCount !== 1 ? "s" : ""} skipped — not applicable to this program.`
+                : "All checks passed. Click Run to execute this program."}
             </div>
           ) : (
             <div className="rounded-md bg-destructive/10 border border-destructive/20 text-destructive px-3 py-2 text-xs mt-2">

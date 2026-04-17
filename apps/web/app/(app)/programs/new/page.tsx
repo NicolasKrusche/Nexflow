@@ -44,6 +44,17 @@ const PROVIDER_LABELS: Record<string, string> = {
   sheets: "Google Sheets",
 };
 
+// fix: model-provider display names so the generation loader reflects the selected model
+const MODEL_PROVIDER_LABELS: Record<string, string> = {
+  anthropic: "Claude",
+  openai: "GPT",
+  google: "Gemini",
+  groq: "Llama (Groq)",
+  mistral: "Mistral",
+  openrouter: "OpenRouter",
+  cohere: "Command",
+};
+
 function NewProgramPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -430,17 +441,25 @@ function NewProgramPageInner() {
       )}
 
       {/* Generating / Refining */}
-      {step === "generating" && (
-        <div className="py-20 text-center space-y-3">
-          <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-            <Spinner />
-            {generatingMessage}
+      {step === "generating" && (() => {
+        // fix: use the selected model's provider label instead of hardcoded "Claude"
+        const selectedKey = apiKeys.find((k) => k.id === selectedKeyId);
+        const modelDisplay =
+          (selectedKey && MODEL_PROVIDER_LABELS[selectedKey.provider]) ||
+          model.trim() ||
+          "The model";
+        return (
+          <div className="py-20 text-center space-y-3">
+            <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+              <Spinner />
+              {generatingMessage}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {modelDisplay} is designing the graph schema. This usually takes about 1 minute.
+            </p>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Claude is designing the graph schema. This usually takes about 1 minute.
-          </p>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Result */}
       {step === "result" && (

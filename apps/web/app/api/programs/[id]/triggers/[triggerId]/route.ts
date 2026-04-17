@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { parseExpression } from "cron-parser";
+import { CronExpressionParser } from "cron-parser"; // fix: cron-parser v5 exports CronExpressionParser, not parseExpression
 import { apiError, createServiceClient, getAuthUser } from "@/lib/api";
 import { createServerClient } from "@/lib/supabase/server";
 
@@ -46,7 +46,7 @@ export async function PATCH(
     if (expr) {
       try {
         const timezone = ((body.config as Record<string, unknown>).timezone as string) ?? "UTC";
-        const interval = parseExpression(expr, { tz: timezone });
+        const interval = CronExpressionParser.parse(expr, { tz: timezone });
         updates.next_run_at = interval.next().toISOString();
       } catch {
         return apiError("Invalid cron expression", 400);

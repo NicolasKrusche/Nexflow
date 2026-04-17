@@ -90,6 +90,7 @@ export async function POST(request: Request) {
     created_at: string;
   };
 
+  // fix: surface DB error message so silent "Failed to create run" failures are debuggable
   const { data: runRaw, error: runError } = await serviceClient
     .from("runs")
     .insert({
@@ -102,7 +103,8 @@ export async function POST(request: Request) {
     .single();
 
   if (runError || !runRaw) {
-    return apiError("Failed to create run", 500);
+    console.error("[/api/runs] insert failed:", runError);
+    return apiError(`Failed to create run${runError?.message ? `: ${runError.message}` : ""}`, 500);
   }
 
   const run = runRaw as unknown as RunRow;
