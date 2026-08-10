@@ -237,6 +237,30 @@ export function validatePostGenesis(
     );
   });
 
+  // ─── ERR_014: write-scoped connection node without an operation ───────────
+  // The runtime treats an operation-less connection node as an auth-only
+  // pass-through and returns success. That is fine for read-scoped nodes that
+  // only supply a connection, but a write-scoped node exists to perform an
+  // action — without an operation the run completes green having done nothing.
+  // (Seen in the wild: Genesis emitted `operation: null` on a gmail label node
+  // and normalizeSchema healed the null away, leaving a silent no-op.)
+
+  execNodes.forEach((node) => {
+    if (node.type !== "connection") return;
+    const connNode = node as ConnectionNode;
+    if (connNode.config.connector_type === "http") return;
+    const config = connNode.config as OAuthConnectionConfig;
+    if (config.operation) return;
+    if (config.scope_access === "write" || config.scope_access === "read_write") {
+      error(
+        "ERR_014",
+        node.id,
+        `${node.label} has write access but no operation selected — it would run as a do-nothing step`,
+        "Open this node and choose the action it should perform (e.g. label_email, send_email)"
+      );
+    }
+  });
+
   // Connection nodes with an operation set must have all required params filled.
   // Genesis uses "__USER_ASSIGNED__" as a sentinel for unknown resource IDs.
   execNodes.forEach((node) => {

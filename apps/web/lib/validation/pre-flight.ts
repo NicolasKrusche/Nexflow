@@ -456,7 +456,21 @@ export async function validatePreFlight(
           const connNode = node as ConnectionNode;
           if (connNode.config.connector_type === "http") continue;
           const cfg = connNode.config as OAuthConnectionConfig;
-          if (!cfg.operation) continue;
+          if (!cfg.operation) {
+            // Operation-less connection nodes are legitimate as auth-only
+            // pass-throughs, but with write scope the node exists to perform an
+            // action — the runtime would silently no-op it and the run would
+            // "succeed" without doing its job.
+            if (cfg.scope_access === "write" || cfg.scope_access === "read_write") {
+              recordFailure(pre004, {
+                code: "PRE_004",
+                node_id: node.id,
+                message: `${node.label} has write access but no operation selected — it would run as a do-nothing step`,
+                fix_suggestion: "Open this node in the editor and choose the action it should perform",
+              });
+            }
+            continue;
+          }
 
           const connRow = connections.find((c) => c.name === node.connection);
           const provider = connRow?.provider ?? cfg.provider ?? "";

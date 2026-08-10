@@ -97,6 +97,45 @@ function makeSchema(overrides?: Partial<ProgramSchema>): ProgramSchema {
   };
 }
 
+const gmailConnection = {
+  id: "conn-1",
+  name: "gmail:primary",
+  provider: "gmail",
+  scopes: [] as string[],
+  is_valid: true,
+};
+const validKey = { id: "key-1", name: "Primary", provider: "openai", is_valid: true };
+
+// A connection node with no operation at all — the shape Genesis produced when
+// a weak model emitted `operation: null` and normalizeSchema deleted the null.
+function withOperationlessConnectionNode(scopeAccess: "read" | "write"): ProgramSchema {
+  const schema = makeSchema();
+  const agentNode = schema.nodes.find((node) => node.id === "n2");
+  if (!agentNode || agentNode.type !== "agent") throw new Error("Expected n2 to be an agent node");
+  agentNode.config.model = "gpt-4o-mini";
+  agentNode.config.api_key_ref = "key-1";
+  schema.nodes.push({
+    id: "n3",
+    type: "connection",
+    label: "Apply label",
+    description: "Applies the receipts label",
+    position: { x: 500, y: 100 },
+    status: "idle",
+    connection: "gmail:primary",
+    config: { provider: "gmail", scope_access: scopeAccess, scope_required: [] },
+  });
+  schema.edges.push({
+    id: "e2",
+    from: "n2",
+    to: "n3",
+    type: "data_flow",
+    data_mapping: null,
+    condition: null,
+    label: null,
+  });
+  return schema;
+}
+
 describe("pre-flight remediations", () => {
   it("suggests assign_agent_defaults for unassigned agent nodes when a valid key exists", async () => {
     const schema = makeSchema();
@@ -161,6 +200,27 @@ describe("pre-flight remediations", () => {
       label: "Remove invalid edge",
       edge_id: "e-bad",
     });
+  });
+
+  it("fails PRE_004 for a write-scoped connection node with no operation", async () => {
+    const schema = withOperationlessConnectionNode("write");
+
+    const { result, checks } = await validatePreFlight(schema, [gmailConnection], [validKey]);
+
+    const check = checks.find((c) => c.code === "PRE_004");
+    expect(check?.status).toBe("fail");
+    expect(check?.failures[0]?.node_id).toBe("n3");
+    expect(check?.failures[0]?.message).toContain("no operation selected");
+    expect(result.valid).toBe(false);
+    expect(result.node_states.n3).toBe("error");
+  });
+
+  it("allows a read-scoped connection node with no operation (auth-only pass-through)", async () => {
+    const schema = withOperationlessConnectionNode("read");
+
+    const { result } = await validatePreFlight(schema, [gmailConnection], [validKey]);
+
+    expect(result.valid).toBe(true);
   });
 
   it("turns executable-schema failures into node-specific draft failures", () => {
