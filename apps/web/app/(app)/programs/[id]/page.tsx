@@ -50,7 +50,13 @@ import {
   type DataFlowPreviewItem,
 } from "@/lib/compliance/workflow";
 
-type SchemaNode = { id: string; label: string; description: string; type: string };
+type SchemaNode = {
+  id: string;
+  label: string;
+  description: string;
+  type: string;
+  config?: { trigger_type?: string } | null;
+};
 
 function parseSchema(raw: Json) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
@@ -76,16 +82,6 @@ function isAiGenerated(genesisModel: string | null): boolean {
 
 // NOTE: timestamps are UTC instants and this is a server component, so they
 // must be formatted client-side in the viewer's zone — see <LocalDateTime>.
-
-function relativeTime(value: string | null) {
-  if (!value) return "no history";
-  const diffMs = Date.now() - new Date(value).getTime();
-  const minutes = Math.max(1, Math.round(diffMs / 60_000));
-  if (minutes < 60) return `updated ${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `updated ${hours}h ago`;
-  return `updated ${Math.round(hours / 24)}d ago`;
-}
 
 function shortProgramId(id: string) {
   return `prg_${id.slice(0, 4)}.${id.slice(-4)}`;
@@ -142,7 +138,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
 
   const { data, error } = await serviceClient
     .from("programs")
-    .select("id, user_id, name, description, execution_mode, conflict_policy, is_active, schema, schema_version, last_run_at, created_at, updated_at, is_public, tags, fork_count, published_at, public_author_name, visibility, workspace_id")
+    .select("id, user_id, name, description, execution_mode, conflict_policy, is_active, schema, schema_version, last_run_at, created_at, updated_at, is_public, tags, fork_count, published_at, public_author_name, visibility, workspace_id, ai_use_case_category, ai_act_risk_level, customer_role, human_oversight_required, transparency_notice_required, high_risk_documentation_required, prohibited_reason, reviewer, reviewed_at, ai_act_notes, legal_review_override")
     .eq("id", id)
     .single();
 
@@ -232,7 +228,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
 
   const completedRuns = completedRunsResult.count ?? 0;
   const failedRuns = failedRunsResult.count ?? 0;
-  const creatorName = (creatorResult.data as { display_name?: string | null } | null)?.display_name ?? "Nicolas";
+  const creatorName = (creatorResult.data as { display_name?: string | null } | null)?.display_name ?? "Unknown";
   const parsedComplianceSchema = ProgramSchemaZ.safeParse(program.schema);
   let complianceChecks: ComplianceCheck[] = [
     {
@@ -403,7 +399,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-sm font-semibold">Workflow topology</h2>
-                  <Badge variant="outline" className="rounded-md">{nodes.length} node</Badge>
+                  <Badge variant="outline" className="rounded-md">{nodes.length} {nodes.length === 1 ? "node" : "nodes"}</Badge>
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">Nodes in execution order with their current role in the graph.</p>
               </div>
@@ -439,7 +435,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
                       <p className="font-semibold">{node.label}</p>
                       <p className="text-sm text-muted-foreground">{node.description || "No description."}</p>
                     </div>
-                    <span className="hidden font-mono text-xs text-muted-foreground sm:block">{node.type === "trigger" ? "trigger.manual" : node.type}</span>
+                    <span className="hidden font-mono text-xs text-muted-foreground sm:block">{node.type === "trigger" ? `trigger.${node.config?.trigger_type ?? "manual"}` : node.type}</span>
                     <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary">{node.type}</Badge>
                   </div>
                 ))

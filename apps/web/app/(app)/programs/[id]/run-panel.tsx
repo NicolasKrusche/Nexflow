@@ -53,7 +53,7 @@ export function RunPanel({ programId }: { programId: string }) {
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [stopping, setStopping] = useState(false);
 
-  async function runPreflight() {
+  async function runPreflight(): Promise<PreFlightResult | null> {
     setState("checking");
     setFetchError(null);
     setPreflight(null);
@@ -64,15 +64,27 @@ export function RunPanel({ programId }: { programId: string }) {
         const err = await res.json().catch(() => ({}));
         setFetchError(friendlyResponseMessage(err as { error?: string }, "We could not check this workflow. Please try again."));
         setState("done");
-        return;
+        return null;
       }
 
       const data: PreFlightResult = await res.json();
       setPreflight(data);
       setState("done");
+      return data;
     } catch {
       setFetchError("We could not connect. Check your internet connection and try again.");
       setState("done");
+      return null;
+    }
+  }
+
+  // One click = check, then run. The button used to stop after a passing check
+  // and silently wait for a second click — users read the green labels as "it
+  // ran" and reported the workflow as broken when no run ever started.
+  async function checkAndRun() {
+    const result = await runPreflight();
+    if (result?.result.valid) {
+      await startRun();
     }
   }
 
@@ -154,7 +166,6 @@ export function RunPanel({ programId }: { programId: string }) {
     }
   }
 
-  const allPassed = preflight?.result.valid === true;
   const failures = preflight?.checks.flatMap((check, checkIndex) =>
     check.failures.map((failure, failureIndex) => ({ check, checkIndex, failure, failureIndex }))
   ) ?? [];
@@ -170,7 +181,7 @@ export function RunPanel({ programId }: { programId: string }) {
             <h2 className="text-sm font-semibold">Run program</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Starts a single manual run now. To run automatically on a schedule, set up a trigger on the{" "}
-              <a href="triggers" className="font-medium text-primary hover:underline underline-offset-2">Triggers</a> page — cron triggers run indefinitely until you pause them.
+              <a href={`/programs/${programId}/triggers`} className="font-medium text-primary hover:underline underline-offset-2">Triggers</a> page — cron triggers run indefinitely until you pause them.
             </p>
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
               {(() => {
@@ -226,7 +237,7 @@ export function RunPanel({ programId }: { programId: string }) {
           </Button>
           <Button
             type="button"
-            onClick={allPassed ? startRun : runPreflight}
+            onClick={checkAndRun}
             disabled={state === "checking" || state === "starting" || applyingFixId !== null}
             className="h-10 bg-foreground px-5 text-background hover:bg-foreground/90"
           >
