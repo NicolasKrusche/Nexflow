@@ -420,6 +420,19 @@ async def touch_run_watcher_heartbeat(db: Client, run_id: str) -> None:
         print(f"[db] WARNING: could not renew resource-lock TTL for run {run_id}: {exc}", flush=True)
 
 
+async def mark_api_key_invalid(db: Client, api_key_id: str) -> None:
+    """Flip api_keys.is_valid after a definitive provider auth failure (401) on
+    a BYOK key. Without this the key row stays "valid" forever and the web
+    pre-flight (PRE_002) keeps reporting a dead key as healthy, so users see
+    all-green checks on workflows that can only fail. Best-effort: a DB error
+    here must never mask the original LLM failure."""
+    try:
+        db.table("api_keys").update({"is_valid": False}).eq("id", api_key_id).execute()
+        print(f"[db] marked api_key {api_key_id} invalid after provider auth failure", flush=True)
+    except Exception as exc:
+        print(f"[db] WARNING: could not mark api_key {api_key_id} invalid: {exc}", flush=True)
+
+
 async def create_node_execution(db: Client, run_id: str, node_id: str) -> dict:
     # No DB-level unique constraint on (run_id, node_id), so check first to
     # avoid creating duplicate rows on re-dispatch (e.g. Skip trigger flow).

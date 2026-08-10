@@ -51,6 +51,7 @@ from db import (
     get_db,
     get_existing_lock,
     get_run_status,
+    mark_api_key_invalid,
     resolve_default_device,
     touch_run_watcher_heartbeat,
     update_node_execution,
@@ -4076,6 +4077,24 @@ class ProgramExecutor:
         seen.add(connection_ref)
         await self._fire_internal_agent_tool("corelyx.record_source", {"kind": "connector", "name": connection_ref})
 
+    async def _flag_dead_byok_key(self, cfg: AgentConfig, status_code: int, deduct_credits: bool) -> None:
+        """On a definitive provider auth failure (401), mark the BYOK key row
+        invalid so the web pre-flight (PRE_002) stops reporting a dead key as
+        healthy. Platform-key failures are an ops problem, not a user-key
+        problem — skipped via deduct_credits. cfg.api_key_ref is trusted here
+        because every _call_llm caller passes the cfg whose ref funded the call
+        (the agent_task credential loop uses its own LLM paths and instead
+        falls through to its next credential candidate by design)."""
+        if deduct_credits or status_code != 401:
+            return
+        ref = cfg.api_key_ref or ""
+        if not re.fullmatch(
+            r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", ref
+        ):
+            return
+        log.warning("llm.byok_key_auth_failed", api_key_ref=ref, status_code=status_code)
+        await mark_api_key_invalid(self.db, ref)
+
     async def _call_llm(
         self,
         cfg: AgentConfig,
@@ -4181,6 +4200,7 @@ class ProgramExecutor:
             )
             print(f"[LLM/anthropic] {resp.status_code} model={cfg.model}", flush=True)
             if not resp.is_success:
+                await self._flag_dead_byok_key(cfg, resp.status_code, deduct_credits)
                 raise Exception(
                     f"LLM API error {resp.status_code} from {base_url} (model={cfg.model}): {resp.text[:500]}"
                 )
@@ -4225,6 +4245,7 @@ class ProgramExecutor:
                 json=request_body,
             )
             if not resp.is_success:
+                await self._flag_dead_byok_key(cfg, resp.status_code, deduct_credits)
                 raise Exception(
                     f"LLM API error {resp.status_code} from {base_url} (model={cfg.model}): {resp.text[:500]}"
                 )

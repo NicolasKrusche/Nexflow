@@ -152,16 +152,19 @@ class RetryPolicy:
         if isinstance(error, self.retryable_exceptions):
             return True
 
-        # Check for ExecutionError with status code
-        if isinstance(error, ExecutionError):
-            status_code = self._extract_status_code(error)
-            if status_code is not None:
-                if status_code in self.non_retryable_status_codes:
-                    return False
-                if status_code in self.retryable_status_codes:
-                    return True
-                # Default: retry 5xx, don't retry 4xx
-                return 500 <= status_code < 600
+        # Status-code classification works off the message text, so apply it to
+        # ANY exception. LLM calls raise plain Exception("LLM API error 401 …"),
+        # which previously skipped this branch (it was gated on ExecutionError)
+        # and fell through to the "retry unknown errors" default — burning the
+        # full retry budget on permanent 401s from dead keys.
+        status_code = self._extract_status_code(error)
+        if status_code is not None:
+            if status_code in self.non_retryable_status_codes:
+                return False
+            if status_code in self.retryable_status_codes:
+                return True
+            # Default: retry 5xx, don't retry 4xx
+            return 500 <= status_code < 600
 
         # Check for rate limit / timeout patterns in error message
         error_msg = str(error).lower()
@@ -185,6 +188,7 @@ class RetryPolicy:
             "invalid api key",
             "invalid_api_key",
             "incorrect api key",
+            "user not found",
             "authentication_error",
             "no api key provided",
             "you didn't provide an api key",
@@ -204,8 +208,8 @@ class RetryPolicy:
         # Default: retry on unknown errors (conservative)
         return True
 
-    def _extract_status_code(self, error: ExecutionError) -> int | None:
-        """Extract HTTP status code from ExecutionError message."""
+    def _extract_status_code(self, error: Exception) -> int | None:
+        """Extract HTTP status code from an exception message."""
         import re
 
         match = re.search(r"LLM API error\s+(\d{3})", str(error))
