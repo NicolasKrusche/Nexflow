@@ -3,7 +3,9 @@ import type { ProgramSchema } from "@flowos/schema";
 import {
   DEFAULT_WORKSPACE_COMPLIANCE,
   generateComplianceExportReport,
+  hasBlockingComplianceChecks,
   validateWorkflowCompliance,
+  type ComplianceCheck,
 } from "../workflow";
 
 function makeSchema(overrides?: Partial<ProgramSchema>): ProgramSchema {
@@ -142,6 +144,33 @@ describe("workflow compliance evidence", () => {
     );
 
     expect(checks.find((check) => check.id === "human-approval")?.status).toBe("blocked");
+  });
+
+  it("keeps heuristic high-impact findings as warnings — only explicit oversight blocks", () => {
+    // Autonomous workflow with an agent node and NO explicit risk classification:
+    // the high-impact heuristic counts every agent node, so this must stay a
+    // warning or effectively all autonomous workflows would be blocked.
+    const checks = validateWorkflowCompliance(
+      makeSchema(),
+      DEFAULT_WORKSPACE_COMPLIANCE,
+      { apiKeys: [{ id: "key-openai", provider: "openai", is_valid: true }] }
+    );
+
+    expect(checks.find((check) => check.id === "human-approval")?.status).toBe("warning");
+    expect(hasBlockingComplianceChecks(checks)).toBe(false);
+  });
+
+  it("blocks on blocked checks; needs_reviewer blocks only when opted in (publish)", () => {
+    const blocked: ComplianceCheck[] = [
+      { id: "x", label: "X", status: "blocked", message: "" },
+    ];
+    const needsReviewer: ComplianceCheck[] = [
+      { id: "y", label: "Y", status: "needs_reviewer", message: "" },
+    ];
+
+    expect(hasBlockingComplianceChecks(blocked)).toBe(true);
+    expect(hasBlockingComplianceChecks(needsReviewer)).toBe(false);
+    expect(hasBlockingComplianceChecks(needsReviewer, { includeNeedsReviewer: true })).toBe(true);
   });
 
   it("generates a compliance export with providers, retention, and audit fields", () => {

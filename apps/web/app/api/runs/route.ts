@@ -1,5 +1,6 @@
 import { NextResponse, after } from "next/server";
 import { apiError, createServiceClient, getAuthUser } from "@/lib/api";
+import { isAdminEmail } from "@/lib/admin";
 import { serverLog } from "@/lib/server-log";
 import {
   buildRuntimeExecuteHeaders,
@@ -71,7 +72,7 @@ export async function POST(request: Request) {
 
   const { data: program, error: progError } = await supabase
     .from("programs")
-    .select("id, schema, user_id, workspace_id, schema_version")
+    .select("id, schema, user_id, workspace_id, schema_version, ai_use_case_category, ai_act_risk_level, customer_role, human_oversight_required, transparency_notice_required, high_risk_documentation_required, prohibited_reason, reviewer, reviewed_at, ai_act_notes, legal_review_override")
     .eq("id", program_id)
     .single();
 
@@ -200,10 +201,23 @@ export async function POST(request: Request) {
   }
 
   const workspaceCompliance = await loadWorkspaceComplianceSettings(programWorkspaceId, serviceClient);
+  // Pass the program row so AI-Act governance fields (risk level, oversight,
+  // legal override) come from the same source the program page uses — without
+  // it the run-stored policy_checks silently disagree with the page.
+  // legal_review_override downgrades a prohibited-risk block to a warning, and
+  // programs RLS is row-granular — an owner could self-set the column via
+  // PostgREST. Honor it only for admin callers, mirroring the publish route.
+  const programForCompliance = {
+    ...(program as Record<string, unknown>),
+    legal_review_override:
+      (program as { legal_review_override?: boolean | null }).legal_review_override === true &&
+      isAdminEmail(user.email ?? undefined),
+  };
   const complianceChecks = validateWorkflowCompliance(
     runnableSchema,
     workspaceCompliance,
-    { connections, apiKeys }
+    { connections, apiKeys },
+    programForCompliance as Parameters<typeof validateWorkflowCompliance>[3]
   );
   if (hasBlockingComplianceChecks(complianceChecks)) {
     return NextResponse.json(

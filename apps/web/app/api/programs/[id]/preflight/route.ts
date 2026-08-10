@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/server";
 import { apiError, createServiceClient } from "@/lib/api";
+import { isAdminEmail } from "@/lib/admin";
 import { buildDraftCompletenessPreFlight, validatePreFlight } from "@/lib/validation/pre-flight";
 import { ProgramSchemaZ } from "@flowos/schema";
 import type { ProgramSchema } from "@flowos/schema";
@@ -27,7 +28,7 @@ export async function POST(
 
   const { data: program, error: progError } = await supabase
     .from("programs")
-    .select("id, schema")
+    .select("id, schema, ai_use_case_category, ai_act_risk_level, customer_role, human_oversight_required, transparency_notice_required, high_risk_documentation_required, prohibited_reason, reviewer, reviewed_at, ai_act_notes, legal_review_override")
     .eq("id", params.id)
     .single();
 
@@ -141,13 +142,23 @@ export async function POST(
   );
 
   const workspaceCompliance = await loadWorkspaceComplianceSettings(access!.workspaceId, serviceClient);
+  // Pass the program row so the dry-run predicts exactly what POST /api/runs
+  // will enforce — both read AI-Act governance from the same source, and both
+  // honor legal_review_override only for admin callers (see the run route).
+  const programForCompliance = {
+    ...(program as Record<string, unknown>),
+    legal_review_override:
+      (program as { legal_review_override?: boolean | null }).legal_review_override === true &&
+      isAdminEmail(user.email ?? undefined),
+  };
   const complianceChecks = validateWorkflowCompliance(
     schema,
     workspaceCompliance,
     {
       connections,
       apiKeys: (apiKeys ?? []) as Array<{ id: string; name: string; provider: string; is_valid: boolean }>,
-    }
+    },
+    programForCompliance as Parameters<typeof validateWorkflowCompliance>[3]
   );
 
   return NextResponse.json({ result, checks, compliance_checks: complianceChecks });

@@ -672,18 +672,26 @@ export function validateWorkflowCompliance(
 
   const highImpactNodes = schema.nodes.filter(isHighImpactAction);
   const hasApproval = hasAnyHumanApprovalGate(schema);
-  const oversightRequired =
-    ai.ai_act_risk_level === "high_risk" ||
-    ai.human_oversight_required ||
-    highImpactNodes.length > 0;
+  // "Blocked" is reserved for EXPLICIT oversight requirements (high-risk AI Act
+  // classification or human_oversight_required set on the program). The
+  // high-impact heuristic counts every agent node, so treating it as blocking
+  // would stop effectively all autonomous workflows — it stays a warning.
+  const explicitOversightRequired =
+    ai.ai_act_risk_level === "high_risk" || ai.human_oversight_required;
   addCheck(checks, {
     id: "human-approval",
     label: "Human-approval requirement check",
-    status: oversightRequired && !hasApproval ? "blocked" : highImpactNodes.length > 0 ? "warning" : "passed",
-    message: oversightRequired && !hasApproval
-      ? "High-impact or high-risk workflow has no human approval gate."
+    status: explicitOversightRequired && !hasApproval
+      ? "blocked"
       : highImpactNodes.length > 0
-        ? "High-impact actions are present; verify approval gates match the customer risk assessment."
+        ? "warning"
+        : "passed",
+    message: explicitOversightRequired && !hasApproval
+      ? "This workflow is marked as requiring human oversight but has no approval gate."
+      : highImpactNodes.length > 0
+        ? hasApproval
+          ? "High-impact actions are present; verify approval gates match the customer risk assessment."
+          : "High-impact actions run without a human approval gate; add one if these actions need review."
         : "No high-impact action requirement was detected.",
   });
 
@@ -739,8 +747,23 @@ export function validateWorkflowCompliance(
   return checks;
 }
 
-export function hasBlockingComplianceChecks(_checks: ComplianceCheck[]) {
-  return false;
+// A "blocked" status now actually blocks runs and publishing (the run/publish
+// routes 422 on it), matching what the check copy has promised all along.
+// Blocked is only produced by explicit, opted-in conditions: eu_only-mode
+// registry gaps, an AI-Act "prohibited" classification without legal override,
+// an explicit human-oversight requirement with no approval gate, and high-risk
+// workflows with zero log retention. Heuristic findings stay warnings.
+// "needs_reviewer" additionally blocks PUBLISHING only — its check copy
+// promises "reviewer approval before publish", not before every run.
+export function hasBlockingComplianceChecks(
+  checks: ComplianceCheck[],
+  options: { includeNeedsReviewer?: boolean } = {}
+) {
+  return checks.some(
+    (check) =>
+      check.status === "blocked" ||
+      (options.includeNeedsReviewer === true && check.status === "needs_reviewer")
+  );
 }
 
 function uniqueProviders(flow: DataFlowPreviewItem[]) {

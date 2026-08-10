@@ -130,7 +130,7 @@ export async function POST(
       providerContext,
       programForCompliance
     );
-    if (hasBlockingComplianceChecks(complianceChecks)) {
+    if (hasBlockingComplianceChecks(complianceChecks, { includeNeedsReviewer: true })) {
       return NextResponse.json(
         {
           error: "COMPLIANCE_CHECKS_FAILED",
