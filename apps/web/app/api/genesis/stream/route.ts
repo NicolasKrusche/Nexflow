@@ -927,6 +927,10 @@ export async function POST(request: Request) {
         // question answer route reuses it instead of falling back to a fixed
         // default model regardless of what generated the program.
         (schema as { metadata: { genesis_model: string } }).metadata.genesis_model = modelUsed;
+        // Same reasoning for the timestamp: the model cannot know the current
+        // date and hallucinates one (seen: a saved 2025 date on a 2026 program).
+        (schema as { metadata: { genesis_timestamp?: string } }).metadata.genesis_timestamp =
+          new Date().toISOString();
         let validation = validatePostGenesis(schema as unknown as Parameters<typeof validatePostGenesis>[0], connections);
 
         // Targeted repair pass — see semantic-repair.ts. Deterministic fixes

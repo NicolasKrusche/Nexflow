@@ -682,6 +682,7 @@ Without output_schema the agent returns prose, the runtime stores it as {"text":
 STEP NODE (connection: ALWAYS null):
 Expressions use Python-like syntax on "data" dict. ALWAYS access upstream node output via its node ID: data['n1'].get('field',''), data['n2']['key'], etc. Never use data.get('field') directly — the flat merge is unreliable. Allowed: data['nX'].get(k,default), len(), str(), int(), float(), any(), all(), and/or/not, ==, !=, list comprehensions [x for x in ...], str.join/split/strip/upper/lower.
 Literals are PYTHON: True/False/None — never lowercase true/false/null and never undefined.
+⚠ Every node's output data['nX'] is a DICT, never a list — slicing it (data['n2'][:5]) fails at runtime with "Slicing dictionaries is not allowed". The list lives under a field: slice data['n2']['emails'][:5] or data['n2']['body'][:5] (HTTP nodes emit {status_code,url,headers,body}). Check the upstream node's output fields before slicing or iterating.
   filter: {"logic_type":"filter","condition":"len(data['n2'].get('emails',[]))>0","pass_schema":null}  ← always data['nodeId'].get(...), never data.get(...)
   transform: {"logic_type":"transform","transformation":"{'key':data['n1']['key']}","input_schema":null,"output_schema":null}
   loop: {"logic_type":"loop","over":"data['n2']['items']","item_var":"item"}  → if this is node n3 with item_var:"email", downstream uses data['n3']['email']['id'] or {{n3.email.id}}. item_var name becomes the key under the loop node ID.
