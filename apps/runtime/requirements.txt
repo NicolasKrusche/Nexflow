@@ -11,7 +11,7 @@ python-dotenv==1.2.2
 apscheduler>=3.10.0,<4.0.0
 
 # Schema codegen (Task #5): generate Pydantic models from packages/schema/generated/schema.json
-datamodel-code-generator==0.28.1
+datamodel-code-generator==0.72.2
 
 # Optional — strict PII tier (local person-name NER). Install ONE of these to
 # enable [PERSON_n] pseudonymization; without them strict mode covers
