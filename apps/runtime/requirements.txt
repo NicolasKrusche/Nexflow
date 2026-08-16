@@ -17,7 +17,7 @@ datamodel-code-generator==0.28.1
 # enable [PERSON_n] pseudonymization; without them strict mode covers
 # structured identifiers only (engine/ner.py degrades gracefully).
 # gliner>=0.2.13            # best recall, multilingual PII-tuned (pulls torch)
-spacy>=3.7 ; python_version >= "3.11"   # lighter; also: python -m spacy download xx_ent_wiki_sm
+spacy>=3.8.15 ; python_version >= "3.11"   # lighter; also: python -m spacy download xx_ent_wiki_sm
 
 # Testing
 pytest>=8.0.0
