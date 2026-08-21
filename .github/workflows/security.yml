@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.2.2
 
       - name: Semgrep
-        uses: returntocorp/semgrep-action@1.89.0
+        uses: semgrep/semgrep-action@713efdd345f3035192eaa63f56867b88e63e4e5d # v1.89.0
         with:
           config: p/security-audit
           args: --no-suppress-errors
@@ -76,13 +76,12 @@ jobs:
         uses: semgrep/semgrep-action@713efdd345f3035192eaa63f56867b88e63e4e5d # v1.89.0
         with:
           config: p/ci
-          version: "1.89.0"
-          extraArgs: >
+          args: >
             --error
             --metrics=off
             --exclude-rule "package_managers.pnpm.pnpm-missing-minimum-release-age.pnpm-minimum-release-age"
             --exclude-rule "package_managers.pnpm.pnpm-trust-policy.pnpm-trust-policy"
             --exclude-rule "package_managers.pnpm.pnpm-block-exotic-sub-dependencies.pnpm-block-exotic-sub-dependencies"
-            --exclude-rule "package_managers.npm.npm-missing-minimum-release-age.npm-missing-minimum-release-age"
-        env:
-          SEMGREP_SEND_METRICS: "off"
+            --exclude-rule "package_managers.npm.npm-missing-minimum-release-age.npm-missing-release-age"
+          env:
+            SEMGREP_SEND_METRICS: "off"
